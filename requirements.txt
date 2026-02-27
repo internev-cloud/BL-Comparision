@@ -4,4 +4,4 @@ matplotlib
 numpy
 plotly
 Openpyxl
-Altair
+Altair<5
