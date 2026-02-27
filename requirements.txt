@@ -1,7 +1,6 @@
-pandas
 streamlit
+pandas
+plotly
+openpyxl
 matplotlib
 numpy
-plotly
-Openpyxl
-Altair<5
