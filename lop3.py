@@ -16,43 +16,48 @@ file2 = st.sidebar.file_uploader("Upload AY 25-26 (BaseLine_Data_25-26YMR.xlsx)"
 
 @st.cache_data
 def load_and_prep_data(file1, file2):
-    # Read specifically the Baseline sheets
-    df_24_25 = pd.read_excel(file1, sheet_name='BaseLine-AY2425')
-    df_25_26 = pd.read_excel(file2, sheet_name='BL-Data')
+    common_cols = ['State', 'Centre Name', 'Donor', 'Subject', 'Grade', 'Total Marks', 'Obtained Marks', 'Category', 'Academic Year']
+    dfs_to_concat = []
 
-    # Standardize column names (AY 24-25 uses 'Rubrics', AY 25-26 uses 'Category')
-    if 'Rubrics' in df_24_25.columns:
-        df_24_25 = df_24_25.rename(columns={'Rubrics': 'Category'})
-    if 'Rubrics' in df_25_26.columns:
-        df_25_26 = df_25_26.rename(columns={'Rubrics': 'Category'})
+    # Process File 1 if uploaded
+    if file1:
+        df_24_25 = pd.read_excel(file1, sheet_name='BaseLine-AY2425')
+        if 'Rubrics' in df_24_25.columns:
+            df_24_25 = df_24_25.rename(columns={'Rubrics': 'Category'})
+        df_24_25['Academic Year'] = 'AY 24-25'
+        # Only append available common columns
+        dfs_to_concat.append(df_24_25[[c for c in common_cols if c in df_24_25.columns]])
 
-    # Tag the academic years
-    df_24_25['Academic Year'] = 'AY 24-25'
-    df_25_26['Academic Year'] = 'AY 25-26'
+    # Process File 2 if uploaded
+    if file2:
+        df_25_26 = pd.read_excel(file2, sheet_name='BL-Data')
+        if 'Rubrics' in df_25_26.columns:
+            df_25_26 = df_25_26.rename(columns={'Rubrics': 'Category'})
+        df_25_26['Academic Year'] = 'AY 25-26'
+        # Only append available common columns
+        dfs_to_concat.append(df_25_26[[c for c in common_cols if c in df_25_26.columns]])
 
-    # Define common columns we care about for the comparison
-    common_cols = ['State', 'Centre Name', 'Donor', 'Subject', 'Grade', 'Total Marks', 'Obtained Marks', 'Category',
-                   'Academic Year']
-
-    # Filter datasets to only include common columns to avoid mismatches, then combine
-    df_combined = pd.concat([df_24_25[common_cols], df_25_26[common_cols]], ignore_index=True)
+    # Combine whatever data we have
+    df_combined = pd.concat(dfs_to_concat, ignore_index=True)
 
     # Clean up any potential whitespace in string columns and ensure consistent types
     for col in ['State', 'Centre Name', 'Donor', 'Subject']:
-        df_combined[col] = df_combined[col].astype(str).str.strip()
+        if col in df_combined.columns:
+            df_combined[col] = df_combined[col].astype(str).str.strip()
 
     # Ensure Grade is treated as a string for easy filtering
-    df_combined['Grade'] = df_combined['Grade'].astype(str).str.replace(r'\.0$', '', regex=True)
+    if 'Grade' in df_combined.columns:
+        df_combined['Grade'] = df_combined['Grade'].astype(str).str.replace(r'\.0$', '', regex=True)
 
     return df_combined
 
 
-if file1 and file2:
+if file1 or file2:
     try:
-        with st.spinner('Loading and merging baseline data...'):
+        with st.spinner('Loading baseline data...'):
             df = load_and_prep_data(file1, file2)
 
-        st.sidebar.success("Baseline Data Merged Successfully!")
+        st.sidebar.success("Baseline Data Loaded Successfully!")
         st.sidebar.markdown("---")
 
         # --- Local Filters with "All" Option ---
@@ -95,17 +100,32 @@ if file1 and file2:
         else:
             # --- Key Performance Indicators (KPIs) ---
             st.markdown("### Quick Metrics")
-            col1, col2, col3 = st.columns(3)
-
+            
             total_students = len(filtered_df)
-            avg_marks_24 = filtered_df[filtered_df['Academic Year'] == 'AY 24-25']['Obtained Marks'].mean()
-            avg_marks_25 = filtered_df[filtered_df['Academic Year'] == 'AY 25-26']['Obtained Marks'].mean()
 
-            col1.metric("Total Assessments (Filtered)", f"{total_students:,}")
-            col2.metric("Avg Baseline Score (AY 24-25)", f"{avg_marks_24:.2f}" if pd.notna(avg_marks_24) else "N/A")
-            col3.metric("Avg Baseline Score (AY 25-26)", f"{avg_marks_25:.2f}" if pd.notna(avg_marks_25) else "N/A",
-                        delta=f"{avg_marks_25 - avg_marks_24:.2f}" if pd.notna(avg_marks_24) and pd.notna(
-                            avg_marks_25) else None)
+            # Show 3 columns if both files exist, otherwise show 2
+            if file1 and file2:
+                col1, col2, col3 = st.columns(3)
+                avg_marks_24 = filtered_df[filtered_df['Academic Year'] == 'AY 24-25']['Obtained Marks'].mean()
+                avg_marks_25 = filtered_df[filtered_df['Academic Year'] == 'AY 25-26']['Obtained Marks'].mean()
+
+                col1.metric("Total Assessments (Filtered)", f"{total_students:,}")
+                col2.metric("Avg Baseline Score (AY 24-25)", f"{avg_marks_24:.2f}" if pd.notna(avg_marks_24) else "N/A")
+                col3.metric("Avg Baseline Score (AY 25-26)", f"{avg_marks_25:.2f}" if pd.notna(avg_marks_25) else "N/A",
+                            delta=f"{avg_marks_25 - avg_marks_24:.2f}" if pd.notna(avg_marks_24) and pd.notna(
+                                avg_marks_25) else None)
+            
+            elif file1:
+                col1, col2 = st.columns(2)
+                avg_marks_24 = filtered_df[filtered_df['Academic Year'] == 'AY 24-25']['Obtained Marks'].mean()
+                col1.metric("Total Assessments (Filtered)", f"{total_students:,}")
+                col2.metric("Avg Baseline Score (AY 24-25)", f"{avg_marks_24:.2f}" if pd.notna(avg_marks_24) else "N/A")
+            
+            elif file2:
+                col1, col2 = st.columns(2)
+                avg_marks_25 = filtered_df[filtered_df['Academic Year'] == 'AY 25-26']['Obtained Marks'].mean()
+                col1.metric("Total Assessments (Filtered)", f"{total_students:,}")
+                col2.metric("Avg Baseline Score (AY 25-26)", f"{avg_marks_25:.2f}" if pd.notna(avg_marks_25) else "N/A")
 
             st.markdown("---")
 
@@ -152,4 +172,4 @@ if file1 and file2:
     except Exception as e:
         st.error(f"An error occurred while processing the data: {e}")
 else:
-    st.info("👈 Please upload both Excel files in the sidebar to generate the baseline comparison dashboard.")
+    st.info("👈 Please upload at least one Excel file in the sidebar to generate the baseline dashboard.")
