@@ -1,175 +1,262 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
-# Set page configuration
-st.set_page_config(page_title="Baseline Comparison Dashboard", layout="wide", initial_sidebar_state="expanded")
+# ==========================================
+# PAGE CONFIGURATION & CUSTOM CSS
+# ==========================================
+st.set_page_config(page_title="Impact Analytics Dashboard", layout="wide", initial_sidebar_state="expanded")
 
-st.title("📈 Baseline Assessment Comparison")
-st.markdown("**Academic Year 24-25 vs Academic Year 25-26**")
+# Custom CSS for better KPI cards and UI polishing
+st.markdown("""
+<style>
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+        font-weight: 700;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 4px 4px 0px 0px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# Sidebar for file uploads
-st.sidebar.header("1. Upload Data")
-file1 = st.sidebar.file_uploader("Upload AY 24-25 (EL-BL-Data-AY-24-25.xlsx)", type=["xlsx"])
-file2 = st.sidebar.file_uploader("Upload AY 25-26 (BaseLine_Data_25-26YMR.xlsx)", type=["xlsx"])
+st.title("📈 Impact Analytics Dashboard")
+st.markdown("<p style='color: gray; font-size: 1.1em;'>Comprehensive Baseline vs. Endline Performance Assessment</p>", unsafe_allow_html=True)
 
+# ==========================================
+# SIDEBAR: DATA INTAKE & FILTERS
+# ==========================================
+with st.sidebar:
+    st.header("📁 1. Data Intake")
+    st.markdown("<span style='color: gray; font-size: 0.85em;'>Upload your CSV or Excel files.</span>", unsafe_allow_html=True)
+    
+    file1 = st.file_uploader("Upload Baseline Data", type=["csv", "xlsx"])
+    file2 = st.file_uploader("Upload Endline Data", type=["csv", "xlsx"])
+    
+    st.divider()
 
 @st.cache_data
 def load_and_prep_data(file1, file2):
-    common_cols = ['State', 'Centre Name', 'Donor', 'Subject', 'Grade', 'Total Marks', 'Obtained Marks', 'Category', 'Academic Year']
+    # Added 'Student ID' to extract deeper insights
+    common_cols = ['State', 'Centre Name', 'Donor', 'Subject', 'Grade', 'Student ID', 'Total Marks', 'Obtained Marks', 'Category', 'Academic Year']
     dfs_to_concat = []
 
-    # Process File 1 if uploaded
+    def read_data(f):
+        if f.name.endswith('.csv'):
+            return pd.read_csv(f)
+        return pd.read_excel(f, sheet_name=0)
+
     if file1:
-        df_24_25 = pd.read_excel(file1, sheet_name='BaseLine-AY2425')
-        if 'Rubrics' in df_24_25.columns:
-            df_24_25 = df_24_25.rename(columns={'Rubrics': 'Category'})
-        df_24_25['Academic Year'] = 'AY 24-25'
-        # Only append available common columns
-        dfs_to_concat.append(df_24_25[[c for c in common_cols if c in df_24_25.columns]])
+        df_base = read_data(file1)
+        if 'Rubrics' in df_base.columns: df_base.rename(columns={'Rubrics': 'Category'}, inplace=True)
+        df_base['Academic Year'] = 'Baseline'
+        dfs_to_concat.append(df_base[[c for c in common_cols if c in df_base.columns]])
 
-    # Process File 2 if uploaded
     if file2:
-        df_25_26 = pd.read_excel(file2, sheet_name='BL-Data')
-        if 'Rubrics' in df_25_26.columns:
-            df_25_26 = df_25_26.rename(columns={'Rubrics': 'Category'})
-        df_25_26['Academic Year'] = 'AY 25-26'
-        # Only append available common columns
-        dfs_to_concat.append(df_25_26[[c for c in common_cols if c in df_25_26.columns]])
+        df_end = read_data(file2)
+        if 'Rubrics' in df_end.columns: df_end.rename(columns={'Rubrics': 'Category'}, inplace=True)
+        df_end['Academic Year'] = 'Endline'
+        dfs_to_concat.append(df_end[[c for c in common_cols if c in df_end.columns]])
 
-    # Combine whatever data we have
     df_combined = pd.concat(dfs_to_concat, ignore_index=True)
 
-    # Clean up any potential whitespace in string columns and ensure consistent types
+    # Text cleaning
     for col in ['State', 'Centre Name', 'Donor', 'Subject']:
         if col in df_combined.columns:
             df_combined[col] = df_combined[col].astype(str).str.strip()
 
-    # Ensure Grade is treated as a string for easy filtering
     if 'Grade' in df_combined.columns:
         df_combined['Grade'] = df_combined['Grade'].astype(str).str.replace(r'\.0$', '', regex=True)
 
+    # Enforce R.I.S.E ordering
+    if 'Category' in df_combined.columns:
+        rise_order = ["Reviving", "Shaping", "Initiating", "Evolving"]
+        df_combined['Category'] = pd.Categorical(df_combined['Category'], categories=rise_order, ordered=True)
+
+    # Ensure numeric
+    df_combined['Obtained Marks'] = pd.to_numeric(df_combined['Obtained Marks'], errors='coerce')
+
     return df_combined
 
+# Define color palette for consistency
+COLOR_MAP = {'Baseline': '#636EFA', 'Endline': '#00CC96'}
+RISE_COLORS = {"Reviving": "#EF553B", "Shaping": "#FFA15A", "Initiating": "#AB63FA", "Evolving": "#00CC96"}
 
 if file1 or file2:
-    try:
-        with st.spinner('Loading baseline data...'):
-            df = load_and_prep_data(file1, file2)
+    with st.spinner('Crunching numbers...'):
+        df = load_and_prep_data(file1, file2)
 
-        st.sidebar.success("Baseline Data Loaded Successfully!")
-        st.sidebar.markdown("---")
-
-        # --- Local Filters with "All" Option ---
-        st.sidebar.header("2. Filter Data")
-
-        # Get unique values and prepend "All"
+    with st.sidebar:
+        st.header("🎯 2. Global Filters")
+        
         states = ["All"] + sorted(df['State'].dropna().unique().tolist())
         centres = ["All"] + sorted(df['Centre Name'].dropna().unique().tolist())
-        donors = ["All"] + sorted(df['Donor'].dropna().unique().tolist())
         subjects = ["All"] + sorted(df['Subject'].dropna().unique().tolist())
         grades = ["All"] + sorted(df['Grade'].dropna().unique().tolist())
 
-        # Create multiselects in the sidebar
-        selected_states = st.sidebar.multiselect("Select State(s)", states, default=["All"])
-        selected_centres = st.sidebar.multiselect("Select Centre Name(s)", centres, default=["All"])
-        selected_donors = st.sidebar.multiselect("Select Donor(s)", donors, default=["All"])
-        selected_subjects = st.sidebar.multiselect("Select Subject(s)", subjects, default=["All"])
-        selected_grades = st.sidebar.multiselect("Select Class/Grade(s)", grades, default=["All"])
+        selected_states = st.selectbox("Select State", states, index=0)
+        selected_centres = st.selectbox("Select Centre", centres, index=0)
+        selected_subjects = st.selectbox("Select Subject", subjects, index=0)
+        selected_grades = st.selectbox("Select Grade", grades, index=0)
 
-        # Apply Filters iteratively based on "All" logic
+        # Apply Filters
         filtered_df = df.copy()
+        if selected_states != "All": filtered_df = filtered_df[filtered_df['State'] == selected_states]
+        if selected_centres != "All": filtered_df = filtered_df[filtered_df['Centre Name'] == selected_centres]
+        if selected_subjects != "All": filtered_df = filtered_df[filtered_df['Subject'] == selected_subjects]
+        if selected_grades != "All": filtered_df = filtered_df[filtered_df['Grade'] == selected_grades]
 
-        if "All" not in selected_states:
-            filtered_df = filtered_df[filtered_df['State'].isin(selected_states)]
+    if filtered_df.empty:
+        st.warning("⚠️ No data available for the selected filters. Please adjust your criteria.")
+    else:
+        # ==========================================
+        # DASHBOARD TABS
+        # ==========================================
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "📊 Executive Summary", 
+            "📚 Subject Deep-Dive", 
+            "🗺️ Geographic View",
+            "🗄️ Raw Data"
+        ])
 
-        if "All" not in selected_centres:
-            filtered_df = filtered_df[filtered_df['Centre Name'].isin(selected_centres)]
-
-        if "All" not in selected_donors:
-            filtered_df = filtered_df[filtered_df['Donor'].isin(selected_donors)]
-
-        if "All" not in selected_subjects:
-            filtered_df = filtered_df[filtered_df['Subject'].isin(selected_subjects)]
-
-        if "All" not in selected_grades:
-            filtered_df = filtered_df[filtered_df['Grade'].isin(selected_grades)]
-
-        if filtered_df.empty:
-            st.warning("No data available for the selected filters. Please adjust your selection.")
-        else:
-            # --- Key Performance Indicators (KPIs) ---
-            st.markdown("### Quick Metrics")
+        # ------------------------------------------
+        # TAB 1: EXECUTIVE SUMMARY
+        # ------------------------------------------
+        with tab1:
+            st.markdown("### 🚀 High-Level Metrics")
+            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
             
-            total_students = len(filtered_df)
-
-            # Show 3 columns if both files exist, otherwise show 2
-            if file1 and file2:
-                col1, col2, col3 = st.columns(3)
-                avg_marks_24 = filtered_df[filtered_df['Academic Year'] == 'AY 24-25']['Obtained Marks'].mean()
-                avg_marks_25 = filtered_df[filtered_df['Academic Year'] == 'AY 25-26']['Obtained Marks'].mean()
-
-                col1.metric("Total Assessments (Filtered)", f"{total_students:,}")
-                col2.metric("Avg Baseline Score (AY 24-25)", f"{avg_marks_24:.2f}" if pd.notna(avg_marks_24) else "N/A")
-                col3.metric("Avg Baseline Score (AY 25-26)", f"{avg_marks_25:.2f}" if pd.notna(avg_marks_25) else "N/A",
-                            delta=f"{avg_marks_25 - avg_marks_24:.2f}" if pd.notna(avg_marks_24) and pd.notna(
-                                avg_marks_25) else None)
+            total_assessments = len(filtered_df)
+            base_df = filtered_df[filtered_df['Academic Year'] == 'Baseline']
+            end_df = filtered_df[filtered_df['Academic Year'] == 'Endline']
             
-            elif file1:
-                col1, col2 = st.columns(2)
-                avg_marks_24 = filtered_df[filtered_df['Academic Year'] == 'AY 24-25']['Obtained Marks'].mean()
-                col1.metric("Total Assessments (Filtered)", f"{total_students:,}")
-                col2.metric("Avg Baseline Score (AY 24-25)", f"{avg_marks_24:.2f}" if pd.notna(avg_marks_24) else "N/A")
+            avg_base = base_df['Obtained Marks'].mean() if not base_df.empty else None
+            avg_end = end_df['Obtained Marks'].mean() if not end_df.empty else None
+
+            kpi1.metric("Total Assessments", f"{total_assessments:,}")
             
-            elif file2:
-                col1, col2 = st.columns(2)
-                avg_marks_25 = filtered_df[filtered_df['Academic Year'] == 'AY 25-26']['Obtained Marks'].mean()
-                col1.metric("Total Assessments (Filtered)", f"{total_students:,}")
-                col2.metric("Avg Baseline Score (AY 25-26)", f"{avg_marks_25:.2f}" if pd.notna(avg_marks_25) else "N/A")
+            if avg_base is not None and avg_end is not None:
+                kpi2.metric("Baseline Avg Score", f"{avg_base:.2f}")
+                kpi3.metric("Endline Avg Score", f"{avg_end:.2f}", delta=f"{avg_end - avg_base:.2f}")
+                
+                # Calculate % of students in "Evolving" (top category)
+                base_evolve = len(base_df[base_df['Category'] == 'Evolving']) / len(base_df) * 100 if len(base_df) > 0 else 0
+                end_evolve = len(end_df[end_df['Category'] == 'Evolving']) / len(end_df) * 100 if len(end_df) > 0 else 0
+                kpi4.metric("Students in 'Evolving'", f"{end_evolve:.1f}%", delta=f"{end_evolve - base_evolve:.1f}%")
+            elif avg_base is not None:
+                kpi2.metric("Baseline Avg Score", f"{avg_base:.2f}")
+                kpi3.metric("Endline Avg Score", "N/A")
+                kpi4.metric("Data Status", "Awaiting Endline")
+            else:
+                kpi2.metric("Baseline Avg Score", "N/A")
+                kpi3.metric("Endline Avg Score", f"{avg_end:.2f}")
+                kpi4.metric("Data Status", "Endline Only")
 
             st.markdown("---")
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("#### 📈 Score Distribution (Box Plot)")
+                st.caption("Visualizes the spread of scores, median, and outliers.")
+                fig_box = px.box(filtered_df, x="Academic Year", y="Obtained Marks", color="Academic Year", 
+                                 color_discrete_map=COLOR_MAP, points="all")
+                fig_box.update_layout(showlegend=False, margin=dict(l=0, r=0, t=30, b=0))
+                st.plotly_chart(fig_box, use_container_width=True)
 
-            # --- Visualizations ---
-            col_chart1, col_chart2 = st.columns(2)
+            with col_b:
+                st.markdown("#### 🧬 R.I.S.E Category Shift")
+                st.caption("Proportional breakdown of performance categories.")
+                cat_counts = filtered_df.groupby(['Academic Year', 'Category']).size().reset_index(name='Count')
+                cat_counts['Percentage'] = cat_counts.groupby('Academic Year')['Count'].transform(lambda x: x / x.sum() * 100)
+                cat_counts = cat_counts.sort_values(['Academic Year', 'Category'])
+                
+                fig_rise = px.bar(cat_counts, x="Percentage", y="Academic Year", color="Category", 
+                                  orientation='h', text=cat_counts['Percentage'].apply(lambda x: f'{x:.1f}%'),
+                                  color_discrete_map=RISE_COLORS,
+                                  category_orders={"Category": ["Reviving", "Shaping", "Initiating", "Evolving"]})
+                fig_rise.update_layout(barmode='stack', margin=dict(l=0, r=0, t=30, b=0))
+                st.plotly_chart(fig_rise, use_container_width=True)
 
-            with col_chart1:
-                # 1. Average Marks by Subject
-                st.markdown("#### Average Marks by Subject")
-                if not filtered_df.empty:
-                    avg_subj = filtered_df.groupby(['Subject', 'Academic Year'])['Obtained Marks'].mean().reset_index()
-                    fig_subj = px.bar(avg_subj, x='Subject', y='Obtained Marks', color='Academic Year', barmode='group',
-                                      text_auto='.2f',
-                                      color_discrete_map={'AY 24-25': '#1f77b4', 'AY 25-26': '#ff7f0e'})
-                    fig_subj.update_layout(yaxis_title="Avg Obtained Marks")
-                    st.plotly_chart(fig_subj, use_container_width=True)
 
-            with col_chart2:
-                # 2. Performance Category Breakdown
-                st.markdown("#### Performance Category Distribution")
-                if not filtered_df.empty:
-                    # Group by to get percentages
-                    cat_counts = filtered_df.groupby(['Academic Year', 'Category']).size().reset_index(name='Count')
-                    cat_counts['Percentage'] = cat_counts.groupby('Academic Year')['Count'].transform(
-                        lambda x: x / x.sum() * 100)
+        # ------------------------------------------
+        # TAB 2: SUBJECT DEEP-DIVE
+        # ------------------------------------------
+        with tab2:
+            st.markdown("### 📚 Subject & Grade Performance")
+            
+            sub_col1, sub_col2 = st.columns(2)
+            
+            with sub_col1:
+                st.markdown("#### Average Score by Subject")
+                avg_subj = filtered_df.groupby(['Subject', 'Academic Year'])['Obtained Marks'].mean().reset_index()
+                fig_subj = px.bar(avg_subj, x='Subject', y='Obtained Marks', color='Academic Year', barmode='group',
+                                  text_auto='.2f', color_discrete_map=COLOR_MAP)
+                fig_subj.update_layout(yaxis_title="Average Marks", margin=dict(l=0, r=0, t=30, b=0))
+                st.plotly_chart(fig_subj, use_container_width=True)
+                
+            with sub_col2:
+                st.markdown("#### Average Score by Grade")
+                if 'Grade' in filtered_df.columns:
+                    avg_grade = filtered_df.groupby(['Grade', 'Academic Year'])['Obtained Marks'].mean().reset_index()
+                    fig_grade = px.line(avg_grade, x='Grade', y='Obtained Marks', color='Academic Year', markers=True,
+                                        color_discrete_map=COLOR_MAP)
+                    fig_grade.update_layout(yaxis_title="Average Marks", margin=dict(l=0, r=0, t=30, b=0))
+                    st.plotly_chart(fig_grade, use_container_width=True)
 
-                    fig_cat = px.bar(cat_counts, x='Academic Year', y='Percentage', color='Category', barmode='stack',
-                                     text=cat_counts['Percentage'].apply(lambda x: f'{x:.1f}%'))
-                    fig_cat.update_layout(yaxis_title="% of Students")
-                    st.plotly_chart(fig_cat, use_container_width=True)
 
-            st.markdown("#### Average Marks by State")
-            if not filtered_df.empty:
+        # ------------------------------------------
+        # TAB 3: GEOGRAPHIC VIEW
+        # ------------------------------------------
+        with tab3:
+            st.markdown("### 🗺️ Geographic & Centre Analysis")
+            
+            geo_col1, geo_col2 = st.columns([3, 2])
+            
+            with geo_col1:
+                st.markdown("#### State-wise Performance Comparison")
                 avg_state = filtered_df.groupby(['State', 'Academic Year'])['Obtained Marks'].mean().reset_index()
                 fig_state = px.bar(avg_state, x='State', y='Obtained Marks', color='Academic Year', barmode='group',
-                                   text_auto='.2f', color_discrete_map={'AY 24-25': '#1f77b4', 'AY 25-26': '#ff7f0e'})
-                fig_state.update_layout(xaxis={'categoryorder': 'total descending'}, yaxis_title="Avg Obtained Marks")
+                                   text_auto='.2f', color_discrete_map=COLOR_MAP)
+                fig_state.update_layout(xaxis={'categoryorder': 'total descending'}, yaxis_title="Average Marks")
                 st.plotly_chart(fig_state, use_container_width=True)
+                
+            with geo_col2:
+                st.markdown("#### Top 10 Centres (Overall Avg)")
+                top_centres = filtered_df.groupby('Centre Name')['Obtained Marks'].mean().reset_index().sort_values('Obtained Marks', ascending=True).tail(10)
+                fig_top_centres = px.bar(top_centres, x='Obtained Marks', y='Centre Name', orientation='h', text_auto='.2f')
+                fig_top_centres.update_traces(marker_color='#636EFA')
+                fig_top_centres.update_layout(xaxis_title="Avg Marks", yaxis_title="")
+                st.plotly_chart(fig_top_centres, use_container_width=True)
 
-            # --- Raw Data Expander ---
-            with st.expander("View Filtered Raw Data"):
-                st.dataframe(filtered_df, use_container_width=True)
 
-    except Exception as e:
-        st.error(f"An error occurred while processing the data: {e}")
+        # ------------------------------------------
+        # TAB 4: RAW DATA & EXPORT
+        # ------------------------------------------
+        with tab4:
+            st.markdown("### 🗄️ Dataset Explorer")
+            st.markdown("Review the filtered dataset below. You can also download it for external reporting.")
+            
+            # Download button
+            csv = filtered_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Filtered Data as CSV",
+                data=csv,
+                file_name='filtered_impact_data.csv',
+                mime='text/csv',
+            )
+            
+            st.dataframe(filtered_df, use_container_width=True, height=500)
+
 else:
-    st.info("👈 Please upload at least one Excel file in the sidebar to generate the baseline dashboard.")
+    # Empty State Graphic/Message
+    st.info("👈 Please upload your Baseline and/or Endline dataset in the sidebar to populate the dashboard.")
+    st.image("https://cdn-icons-png.flaticon.com/512/7264/7264168.png", width=150) 
