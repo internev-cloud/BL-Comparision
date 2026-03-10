@@ -77,9 +77,9 @@ def load_and_prep_data(file1, file2):
     if 'Grade' in df_combined.columns:
         df_combined['Grade'] = df_combined['Grade'].astype(str).str.replace(r'\.0$', '', regex=True)
 
-    # Enforce R.I.S.E ordering
+    # Enforce R.I.S.E ordering (UPDATED ORDER)
     if 'Category' in df_combined.columns:
-        rise_order = ["Reviving", "Shaping", "Initiating", "Evolving"]
+        rise_order = ["Reviving", "Initiating", "Shaping", "Evolving"]
         df_combined['Category'] = pd.Categorical(df_combined['Category'], categories=rise_order, ordered=True)
 
     # Ensure numeric
@@ -89,7 +89,7 @@ def load_and_prep_data(file1, file2):
 
 # Define color palette for consistency
 COLOR_MAP = {'Baseline': '#636EFA', 'Endline': '#00CC96'}
-RISE_COLORS = {"Reviving": "#EF553B", "Shaping": "#FFA15A", "Initiating": "#AB63FA", "Evolving": "#00CC96"}
+RISE_COLORS = {"Reviving": "#EF553B", "Initiating": "#AB63FA", "Shaping": "#FFA15A", "Evolving": "#00CC96"}
 
 if file1 or file2:
     with st.spinner('Crunching numbers...'):
@@ -179,10 +179,11 @@ if file1 or file2:
                 cat_counts['Percentage'] = cat_counts.groupby('Academic Year')['Count'].transform(lambda x: x / x.sum() * 100)
                 cat_counts = cat_counts.sort_values(['Academic Year', 'Category'])
                 
-                fig_rise = px.bar(cat_counts, x="Percentage", y="Academic Year", color="Category", 
-                                  orientation='h', text=cat_counts['Percentage'].apply(lambda x: f'{x:.1f}%'),
+                # UPDATED CHART: Vertical orientation and new category order
+                fig_rise = px.bar(cat_counts, x="Academic Year", y="Percentage", color="Category", 
+                                  text=cat_counts['Percentage'].apply(lambda x: f'{x:.1f}%'),
                                   color_discrete_map=RISE_COLORS,
-                                  category_orders={"Category": ["Reviving", "Shaping", "Initiating", "Evolving"]})
+                                  category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
                 fig_rise.update_layout(barmode='stack', margin=dict(l=0, r=0, t=30, b=0))
                 st.plotly_chart(fig_rise, use_container_width=True)
 
@@ -259,4 +260,4 @@ if file1 or file2:
 else:
     # Empty State Graphic/Message
     st.info("👈 Please upload your Baseline and/or Endline dataset in the sidebar to populate the dashboard.")
-    st.image("https://cdn-icons-png.flaticon.com/512/7264/7264168.png", width=150) 
+    st.image("https://cdn-icons-png.flaticon.com/512/7264/7264168.png", width=150)
