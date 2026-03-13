@@ -124,22 +124,53 @@ if base_file or end_file:
         with st.sidebar:
             st.header("🎯 2. Global Filters")
             
+            # 1. State Filter
             states = ["All"] + sorted(df['State'].dropna().unique().tolist())
-            centres = ["All"] + sorted(df['Centre Name'].dropna().unique().tolist())
-            subjects = ["All"] + sorted(df['Subject'].dropna().unique().tolist())
-            grades = ["All"] + sorted(df['Grade'].dropna().unique().tolist())
-
             selected_states = st.selectbox("Select State", states, index=0)
-            selected_centres = st.selectbox("Select Centre", centres, index=0)
-            selected_subjects = st.selectbox("Select Subject", subjects, index=0)
-            selected_grades = st.selectbox("Select Grade", grades, index=0)
+            
+            # Pre-filter for next dropdown
+            df_state_filtered = df.copy()
+            if selected_states != "All": 
+                df_state_filtered = df_state_filtered[df_state_filtered['State'] == selected_states]
 
-            # Apply Filters
-            filtered_df = df.copy()
-            if selected_states != "All": filtered_df = filtered_df[filtered_df['State'] == selected_states]
-            if selected_centres != "All": filtered_df = filtered_df[filtered_df['Centre Name'] == selected_centres]
-            if selected_subjects != "All": filtered_df = filtered_df[filtered_df['Subject'] == selected_subjects]
-            if selected_grades != "All": filtered_df = filtered_df[filtered_df['Grade'] == selected_grades]
+            # 2. Donor Filter (Dependent on State)
+            donors = ["All"] + sorted(df_state_filtered['Donor'].dropna().unique().tolist())
+            selected_donors = st.selectbox("Select Donor", donors, index=0)
+            
+            # Pre-filter for next dropdown
+            df_donor_filtered = df_state_filtered.copy()
+            if selected_donors != "All":
+                df_donor_filtered = df_donor_filtered[df_donor_filtered['Donor'] == selected_donors]
+
+            # 3. Centre Filter (Dependent on State & Donor)
+            centres = ["All"] + sorted(df_donor_filtered['Centre Name'].dropna().unique().tolist())
+            selected_centres = st.selectbox("Select Centre", centres, index=0)
+            
+            # Pre-filter for next dropdown
+            df_centre_filtered = df_donor_filtered.copy()
+            if selected_centres != "All":
+                df_centre_filtered = df_centre_filtered[df_centre_filtered['Centre Name'] == selected_centres]
+
+            # 4. Subject Filter (Dependent on Centre)
+            subjects = ["All"] + sorted(df_centre_filtered['Subject'].dropna().unique().tolist())
+            selected_subjects = st.selectbox("Select Subject", subjects, index=0)
+
+            # Pre-filter for next dropdown
+            df_subject_filtered = df_centre_filtered.copy()
+            if selected_subjects != "All":
+                df_subject_filtered = df_subject_filtered[df_subject_filtered['Subject'] == selected_subjects]
+
+            # 5. Grade Filter (Dependent on Subject, Multi-select)
+            grades = sorted(df_subject_filtered['Grade'].dropna().unique().tolist())
+            selected_grades = st.multiselect("Select Grade(s)", options=grades, default=grades)
+
+            # Finalize Filtered DataFrame
+            filtered_df = df_subject_filtered.copy()
+            if selected_grades:
+                filtered_df = filtered_df[filtered_df['Grade'].isin(selected_grades)]
+            else:
+                # Empty dataframe to trigger the warning state gracefully
+                filtered_df = filtered_df.iloc[0:0] 
 
         if filtered_df.empty:
             st.warning("⚠️ No data available for the selected filters. Please adjust your criteria.")
@@ -162,31 +193,45 @@ if base_file or end_file:
             # ------------------------------------------
             with tab1:
                 st.markdown("### 🚀 High-Level Metrics")
-                kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+                
+                # Expanded to 5 columns to fit SD
+                kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
                 
                 total_assessments = len(filtered_df)
                 
                 avg_base = base_df['Obtained Marks'].mean() if not base_df.empty else None
                 avg_end = end_df['Obtained Marks'].mean() if not end_df.empty else None
+                
+                sd_base = base_df['Obtained Marks'].std() if not base_df.empty and len(base_df) > 1 else None
+                sd_end = end_df['Obtained Marks'].std() if not end_df.empty and len(end_df) > 1 else None
 
                 kpi1.metric("Total Assessments", f"{total_assessments:,}")
                 
                 if avg_base is not None and avg_end is not None:
-                    kpi2.metric("Baseline Avg Score", f"{avg_base:.2f}")
-                    kpi3.metric("Endline Avg Score", f"{avg_end:.2f}", delta=f"{avg_end - avg_base:.2f}")
+                    kpi2.metric("Baseline Mean Score", f"{avg_base:.2f}")
+                    kpi3.metric("Endline Mean Score", f"{avg_end:.2f}", delta=f"{avg_end - avg_base:.2f}")
+                    
+                    if sd_base is not None and sd_end is not None:
+                        kpi4.metric("Endline Score SD", f"{sd_end:.2f}", delta=f"{sd_end - sd_base:.2f}", delta_color="inverse")
+                    else:
+                        kpi4.metric("Endline Score SD", "N/A")
                     
                     # Calculate % of students in "Evolving" (top category)
                     base_evolve = len(base_df[base_df['Category'] == 'Evolving']) / len(base_df) * 100 if len(base_df) > 0 else 0
                     end_evolve = len(end_df[end_df['Category'] == 'Evolving']) / len(end_df) * 100 if len(end_df) > 0 else 0
-                    kpi4.metric("Students in 'Evolving'", f"{end_evolve:.1f}%", delta=f"{end_evolve - base_evolve:.1f}%")
+                    kpi5.metric("Students in 'Evolving'", f"{end_evolve:.1f}%", delta=f"{end_evolve - base_evolve:.1f}%")
                 elif avg_base is not None:
-                    kpi2.metric("Baseline Avg Score", f"{avg_base:.2f}")
-                    kpi3.metric("Endline Avg Score", "N/A")
-                    kpi4.metric("Data Status", "Awaiting Endline")
+                    kpi2.metric("Baseline Mean Score", f"{avg_base:.2f}")
+                    kpi3.metric("Endline Mean Score", "N/A")
+                    kpi4.metric("Endline Score SD", "N/A")
+                    kpi5.metric("Data Status", "Awaiting Endline")
                 else:
-                    kpi2.metric("Baseline Avg Score", "N/A")
-                    kpi3.metric("Endline Avg Score", f"{avg_end:.2f}")
-                    kpi4.metric("Data Status", "Endline Only")
+                    kpi2.metric("Baseline Mean Score", "N/A")
+                    kpi3.metric("Endline Mean Score", f"{avg_end:.2f}")
+                    kpi4.metric("Endline Score SD", f"{sd_end:.2f}" if sd_end else "N/A")
+                    kpi5.metric("Data Status", "Endline Only")
+                    
+                st.info("**💡 Understanding Standard Deviation (SD):** SD measures the spread of student scores. A **decrease** (green delta) in SD means scores are becoming more clustered and consistent, indicating that the learning gap between high and low performers is closing. An **increase** (red delta) means the gap is widening.")
 
                 st.markdown("---")
                 
@@ -219,26 +264,89 @@ if base_file or end_file:
             # TAB 2: SUBJECT DEEP-DIVE
             # ------------------------------------------
             with tab2:
-                st.markdown("### 📚 Subject & Grade Performance")
+                st.markdown("### 📚 Subject & Grade Performance (R.I.S.E. Distribution)")
+                
+                # Function to generate 100% stacked data
+                def get_stacked_data(df_subset):
+                    if df_subset.empty or 'Grade' not in df_subset.columns:
+                        return pd.DataFrame()
+                    grouped = df_subset.groupby(['Grade', 'Category']).size().reset_index(name='Count')
+                    grouped['Percentage'] = grouped.groupby('Grade')['Count'].transform(lambda x: x / x.sum() * 100)
+                    return grouped
+                
+                base_stacked = get_stacked_data(base_df)
+                end_stacked = get_stacked_data(end_df)
                 
                 sub_col1, sub_col2 = st.columns(2)
                 
                 with sub_col1:
-                    st.markdown("#### Average Score by Subject")
-                    avg_subj = filtered_df.groupby(['Subject', 'Academic Year'])['Obtained Marks'].mean().reset_index()
-                    fig_subj = px.bar(avg_subj, x='Subject', y='Obtained Marks', color='Academic Year', barmode='group',
-                                      text_auto='.2f', color_discrete_map=COLOR_MAP)
-                    fig_subj.update_layout(yaxis_title="Average Marks", margin=dict(l=0, r=0, t=30, b=0))
-                    st.plotly_chart(fig_subj, use_container_width=True)
-                    
+                    st.markdown("#### Baseline R.I.S.E by Grade")
+                    if not base_stacked.empty:
+                        fig_base_grade = px.bar(base_stacked, x="Grade", y="Percentage", color="Category",
+                                                color_discrete_map=RISE_COLORS, 
+                                                text=base_stacked['Percentage'].apply(lambda x: f'{x:.1f}%' if x > 5 else ''),
+                                                category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
+                        fig_base_grade.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30, b=0))
+                        st.plotly_chart(fig_base_grade, use_container_width=True)
+                    else:
+                        st.info("No Baseline data available.")
+                        
                 with sub_col2:
-                    st.markdown("#### Average Score by Grade")
-                    if 'Grade' in filtered_df.columns:
-                        avg_grade = filtered_df.groupby(['Grade', 'Academic Year'])['Obtained Marks'].mean().reset_index()
-                        fig_grade = px.line(avg_grade, x='Grade', y='Obtained Marks', color='Academic Year', markers=True,
-                                            color_discrete_map=COLOR_MAP)
-                        fig_grade.update_layout(yaxis_title="Average Marks", margin=dict(l=0, r=0, t=30, b=0))
-                        st.plotly_chart(fig_grade, use_container_width=True)
+                    st.markdown("#### Endline R.I.S.E by Grade")
+                    if not end_stacked.empty:
+                        fig_end_grade = px.bar(end_stacked, x="Grade", y="Percentage", color="Category",
+                                               color_discrete_map=RISE_COLORS, 
+                                               text=end_stacked['Percentage'].apply(lambda x: f'{x:.1f}%' if x > 5 else ''),
+                                               category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
+                        fig_end_grade.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30, b=0))
+                        st.plotly_chart(fig_end_grade, use_container_width=True)
+                    else:
+                        st.info("No Endline data available.")
+                
+                # Insights Section
+                st.markdown("---")
+                st.markdown("#### 🧠 Automated Insights")
+                
+                if not base_stacked.empty and not end_stacked.empty:
+                    try:
+                        # Pivot tables to compare EL and BL directly
+                        base_piv = base_stacked.pivot(index='Grade', columns='Category', values='Percentage').fillna(0)
+                        end_piv = end_stacked.pivot(index='Grade', columns='Category', values='Percentage').fillna(0)
+                        
+                        # Ensure all categories exist in columns to prevent KeyError
+                        for cat in ["Reviving", "Initiating", "Shaping", "Evolving"]:
+                            if cat not in base_piv.columns: base_piv[cat] = 0
+                            if cat not in end_piv.columns: end_piv[cat] = 0
+                            
+                        # Only compare grades that exist in both sets
+                        common_grades = base_piv.index.intersection(end_piv.index)
+                        
+                        if len(common_grades) > 0:
+                            diff_piv = end_piv.loc[common_grades] - base_piv.loc[common_grades]
+                            
+                            best_evo_grade = diff_piv['Evolving'].idxmax()
+                            best_evo_val = diff_piv['Evolving'].max()
+                            
+                            best_rev_grade = diff_piv['Reviving'].idxmin()
+                            best_rev_val = diff_piv['Reviving'].min()
+                            
+                            # Insight 1: Top Evolving
+                            if best_evo_val > 0:
+                                st.success(f"📈 **Top Excellence Growth:** Grade **{best_evo_grade}** saw the highest shift into the 'Evolving' category, increasing its top-tier share by **{best_evo_val:+.1f}** percentage points from Baseline to Endline.")
+                            else:
+                                st.warning("⚠️ **Excellence Alert:** No grade saw an increase in the 'Evolving' category percentage.")
+                            
+                            # Insight 2: Top Reviving Drop
+                            if best_rev_val < 0:
+                                st.success(f"📉 **Highest Risk Reduction:** Grade **{best_rev_grade}** had the most successful intervention for struggling students, reducing its 'Reviving' (lowest tier) population by **{abs(best_rev_val):.1f}** percentage points.")
+                            else:
+                                st.warning("⚠️ **Risk Alert:** No grade successfully reduced their share of students in the 'Reviving' category.")
+                        else:
+                            st.info("Insufficient overlapping grades between Baseline and Endline to generate comparative insights.")
+                    except Exception as e:
+                        st.info("Not enough data variance to generate automated insights.")
+                else:
+                    st.info("Awaiting both Baseline and Endline data to generate comparative insights.")
 
 
             # ------------------------------------------
@@ -250,20 +358,72 @@ if base_file or end_file:
                 geo_col1, geo_col2 = st.columns([3, 2])
                 
                 with geo_col1:
-                    st.markdown("#### State-wise Performance Comparison")
-                    avg_state = filtered_df.groupby(['State', 'Academic Year'])['Obtained Marks'].mean().reset_index()
-                    fig_state = px.bar(avg_state, x='State', y='Obtained Marks', color='Academic Year', barmode='group',
-                                       text_auto='.2f', color_discrete_map=COLOR_MAP)
-                    fig_state.update_layout(xaxis={'categoryorder': 'total descending'}, yaxis_title="Average Marks")
-                    st.plotly_chart(fig_state, use_container_width=True)
+                    st.markdown("#### State-wise Performance Comparison (R.I.S.E %)")
+                    
+                    if not filtered_df.empty:
+                        # Group by State, Academic Year, and Category
+                        state_cat = filtered_df.groupby(['State', 'Academic Year', 'Category']).size().reset_index(name='Count')
+                        state_cat['Percentage'] = state_cat.groupby(['State', 'Academic Year'])['Count'].transform(lambda x: x / x.sum() * 100)
+                        
+                        # Plot faceted stacked bar chart
+                        fig_state = px.bar(state_cat, x="Academic Year", y="Percentage", color="Category", facet_col="State",
+                                           color_discrete_map=RISE_COLORS,
+                                           text=state_cat['Percentage'].apply(lambda x: f'{x:.1f}%' if not pd.isna(x) and x > 5 else ''),
+                                           category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"],
+                                                            "Academic Year": ["Baseline", "Endline"]})
+                        
+                        fig_state.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30, b=0))
+                        fig_state.update_xaxes(title_text='')
+                        
+                        # Clean up the facet titles (removes "State=" from the top of each column)
+                        fig_state.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+                        
+                        st.plotly_chart(fig_state, use_container_width=True)
+                    else:
+                        st.info("No data available for State comparison.")
                     
                 with geo_col2:
-                    st.markdown("#### Top 10 Centres (Overall Avg)")
-                    top_centres = filtered_df.groupby('Centre Name')['Obtained Marks'].mean().reset_index().sort_values('Obtained Marks', ascending=True).tail(10)
-                    fig_top_centres = px.bar(top_centres, x='Obtained Marks', y='Centre Name', orientation='h', text_auto='.2f')
-                    fig_top_centres.update_traces(marker_color='#636EFA')
-                    fig_top_centres.update_layout(xaxis_title="Avg Marks", yaxis_title="")
-                    st.plotly_chart(fig_top_centres, use_container_width=True)
+                    st.markdown("#### Top 10 Centres (Sorted by % Evolving)")
+                    
+                    if not filtered_df.empty:
+                        # Calculate percentages for each center
+                        center_cat = filtered_df.groupby(['Centre Name', 'Category']).size().reset_index(name='Count')
+                        center_cat['Percentage'] = center_cat.groupby('Centre Name')['Count'].transform(lambda x: x / x.sum() * 100)
+                        
+                        # Pivot to sort centers based on internal categories
+                        center_piv = center_cat.pivot(index='Centre Name', columns='Category', values='Percentage').fillna(0)
+                        
+                        # Ensure all categories exist
+                        for cat in ["Reviving", "Initiating", "Shaping", "Evolving"]:
+                            if cat not in center_piv.columns:
+                                center_piv[cat] = 0
+                                
+                        # Sort descending to get the best centers at the top (head(10))
+                        center_piv_sorted = center_piv.sort_values(
+                            by=['Evolving', 'Shaping', 'Initiating', 'Reviving'], 
+                            ascending=[False, False, False, False]
+                        ).head(10)
+                        
+                        # Reverse the order so the best center appears at the top of the Plotly y-axis
+                        center_piv_sorted = center_piv_sorted.iloc[::-1]
+                        
+                        # Convert back to long format for Plotly Express
+                        top_centres_long = center_piv_sorted.reset_index().melt(
+                            id_vars='Centre Name', 
+                            value_vars=["Reviving", "Initiating", "Shaping", "Evolving"], 
+                            var_name='Category', 
+                            value_name='Percentage'
+                        )
+                        
+                        fig_top_centres = px.bar(top_centres_long, x="Percentage", y="Centre Name", color="Category", 
+                                                 orientation='h', color_discrete_map=RISE_COLORS,
+                                                 text=top_centres_long['Percentage'].apply(lambda x: f'{x:.1f}%' if x > 5 else ''),
+                                                 category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
+                        
+                        fig_top_centres.update_layout(barmode='stack', xaxis_title="% of Students", yaxis_title="", margin=dict(l=0, r=0, t=30, b=0))
+                        st.plotly_chart(fig_top_centres, use_container_width=True)
+                    else:
+                        st.info("No data available for Top Centres.")
 
 
             # ------------------------------------------
@@ -285,48 +445,63 @@ if base_file or end_file:
                     if not paired_df.empty:
                         paired_df['Score Delta'] = paired_df['Obtained Marks_EL'] - paired_df['Obtained Marks_BL']
                         mean_change = paired_df['Score Delta'].mean()
-                        improved_pct = (len(paired_df[paired_df['Score Delta'] > 0]) / len(paired_df)) * 100
+                        
+                        total_paired = len(paired_df)
+                        positive_pct = (len(paired_df[paired_df['Score Delta'] > 0]) / total_paired) * 100
+                        neutral_pct = (len(paired_df[paired_df['Score Delta'] == 0]) / total_paired) * 100
+                        negative_pct = (len(paired_df[paired_df['Score Delta'] < 0]) / total_paired) * 100
                         
                         st.markdown("---")
-                        met_col1, met_col2, met_col3 = st.columns(3)
-                        met_col1.metric("Matched Students", f"{len(paired_df):,}")
-                        met_col2.metric("Avg Score Change (EL - BL)", f"{mean_change:+.2f}")
-                        met_col3.metric("% of Students Improved", f"{improved_pct:.1f}%")
+                        met_col1, met_col2, met_col3, met_col4, met_col5 = st.columns(5)
+                        met_col1.metric("Matched Students", f"{total_paired:,}")
+                        met_col2.metric("Avg Score Change", f"{mean_change:+.2f}")
+                        met_col3.metric("Students (+ Score)", f"{positive_pct:.1f}%")
+                        met_col4.metric("Students (No Change)", f"{neutral_pct:.1f}%")
+                        met_col5.metric("Students (- Score)", f"{negative_pct:.1f}%")
                         st.markdown("---")
                         
-                        viz_col1, viz_col2 = st.columns(2)
+                        st.markdown("#### 🔄 Category Transition Matrix")
+                        st.caption("Read rows left-to-right to see student mobility. **Background colors represent transition status:** <span style='color:#82E0AA; font-weight:bold;'>Green (Upward Transition)</span>, <span style='color:#A9A9A9; font-weight:bold;'>Grey (No Transition)</span>, and <span style='color:#FF7F7F; font-weight:bold;'>Red (Downward Transition)</span>.", unsafe_allow_html=True)
                         
-                        with viz_col1:
-                            st.markdown("#### 🔄 Category Transition Matrix")
-                            st.caption("Read rows left-to-right. E.g., 'Of students who started in Reviving, X% moved to...'")
-                            
-                            # Create transition matrix (row percentages)
-                            transition = pd.crosstab(paired_df['Category_BL'], paired_df['Category_EL'], normalize='index') * 100
-                            
-                            # Plot heatmap
-                            fig_heat = px.imshow(transition, 
-                                                 labels=dict(x="Endline Category", y="Baseline Category", color="% of Students"),
-                                                 x=transition.columns, y=transition.index, text_auto=".1f", color_continuous_scale="Greens")
-                            fig_heat.update_layout(margin=dict(l=0, r=0, t=30, b=0))
+                        # Create transition matrix (row percentages)
+                        transition = pd.crosstab(paired_df['Category_BL'], paired_df['Category_EL'], normalize='index') * 100
+                        
+                        # Ensure complete 4x4 matrix ordering
+                        cat_order = ["Reviving", "Initiating", "Shaping", "Evolving"]
+                        transition = transition.reindex(index=cat_order, columns=cat_order, fill_value=0)
+                        
+                        # Create direction matrix for categorical coloring (1=Up, 0=Neutral, -1=Down)
+                        direction_matrix = pd.DataFrame(index=cat_order, columns=cat_order)
+                        for i, bl in enumerate(cat_order):
+                            for j, el in enumerate(cat_order):
+                                if i == j:
+                                    direction_matrix.loc[bl, el] = 0
+                                elif j > i:
+                                    direction_matrix.loc[bl, el] = 1
+                                else:
+                                    direction_matrix.loc[bl, el] = -1
+                                    
+                        direction_matrix = direction_matrix.astype(float)
+                        
+                        # Plot heatmap using directional colors (Red, Light Grey, Light Green)
+                        fig_heat = px.imshow(direction_matrix, 
+                                             labels=dict(x="Endline Category", y="Baseline Category", color="Transition Type"),
+                                             x=transition.columns, y=transition.index,
+                                             color_continuous_scale=["#FF7F7F", "#F2F4F7", "#82E0AA"]) 
+                        
+                        # Overlay the actual text percentage data
+                        text_matrix = transition.applymap(lambda x: f"{x:.1f}%")
+                        fig_heat.update_traces(text=text_matrix, texttemplate="%{text}", 
+                                               hovertemplate="Baseline: %{y}<br>Endline: %{x}<br>Students: %{text}<extra></extra>")
+                        
+                        # Hide the color scale bar (since it's a categorical proxy) and apply layout
+                        fig_heat.update_coloraxes(showscale=False)
+                        fig_heat.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=500)
+                        
+                        # Center the matrix
+                        col1, col2, col3 = st.columns([1, 4, 1])
+                        with col2:
                             st.plotly_chart(fig_heat, use_container_width=True)
-
-                        with viz_col2:
-                            st.markdown("#### 📈 Individual Score Migration")
-                            st.caption("Dots above the dashed line indicate improvement.")
-                            
-                            fig_scatter = px.scatter(paired_df, x="Obtained Marks_BL", y="Obtained Marks_EL", 
-                                                     color="Category_EL", hover_data=["Student ID"], 
-                                                     color_discrete_map=RISE_COLORS, opacity=0.7)
-                            
-                            # Add y=x reference line
-                            max_val = max(paired_df['Obtained Marks_BL'].max(), paired_df['Obtained Marks_EL'].max())
-                            fig_scatter.add_shape(type="line", x0=0, y0=0, x1=max_val, y1=max_val, line=dict(color="black", dash="dash", width=1))
-                            fig_scatter.update_layout(xaxis_title="Baseline Marks", yaxis_title="Endline Marks", margin=dict(l=0, r=0, t=30, b=0))
-                            st.plotly_chart(fig_scatter, use_container_width=True)
-                            
-                        # Detailed Paired DataFrame
-                        st.markdown("#### 🗄️ Student Data Explorer")
-                        st.dataframe(paired_df, use_container_width=True, height=300)
 
                     else:
                         st.warning("⚠️ Could not find matching 'Student ID' and 'Subject' between the Baseline and Endline datasets.")
