@@ -267,6 +267,7 @@ if base_file or end_file:
                     cat_counts['Percentage'] = cat_counts.groupby('Academic Year')['Count'].transform(lambda x: x / x.sum() * 100)
                     cat_counts = cat_counts.sort_values(['Academic Year', 'Category'])
                     
+                    # Grouped side-by-side bar chart
                     fig_rise = px.bar(cat_counts, x="Category", y="Percentage", color="Academic Year", 
                                       text=cat_counts['Percentage'].apply(lambda x: f'{x:.1f}%' if not pd.isna(x) else ''),
                                       color_discrete_map=COLOR_MAP,
@@ -377,6 +378,15 @@ if base_file or end_file:
                         
                         # Apply Abbreviation to the Academic Year column for this specific chart
                         state_cat['Period'] = state_cat['Academic Year'].map({'Baseline': 'B', 'Endline': 'E'})
+                        
+                        # NEW: Dynamic State Abbreviation (Initials for multi-word, first 3 letters for single-word)
+                        def abbreviate_state(state_name):
+                            words = str(state_name).split()
+                            if len(words) > 1:
+                                return "".join([w[0].upper() for w in words])
+                            return str(state_name)[:3].upper()
+                            
+                        state_cat['State'] = state_cat['State'].apply(abbreviate_state)
                         
                         fig_state = px.bar(state_cat, x="Period", y="Percentage", color="Category", facet_col="State",
                                            color_discrete_map=RISE_COLORS,
