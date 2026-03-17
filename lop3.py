@@ -257,7 +257,7 @@ if base_file or end_file:
                     st.caption("Visualizes the spread of scores, median, and outliers.")
                     fig_box = px.box(filtered_df, x="Academic Year", y="Obtained Marks", color="Academic Year", 
                                      color_discrete_map=COLOR_MAP, points="all")
-                    fig_box.update_layout(showlegend=False, margin=dict(l=0, r=0, t=30, b=0))
+                    fig_box.update_layout(showlegend=False, margin=dict(l=0, r=0, t=30))
                     st.plotly_chart(fig_box, use_container_width=True)
 
                 with col_b:
@@ -267,12 +267,12 @@ if base_file or end_file:
                     cat_counts['Percentage'] = cat_counts.groupby('Academic Year')['Count'].transform(lambda x: x / x.sum() * 100)
                     cat_counts = cat_counts.sort_values(['Academic Year', 'Category'])
                     
-                    # Grouped side-by-side bar chart
                     fig_rise = px.bar(cat_counts, x="Category", y="Percentage", color="Academic Year", 
                                       text=cat_counts['Percentage'].apply(lambda x: f'{x:.1f}%' if not pd.isna(x) else ''),
                                       color_discrete_map=COLOR_MAP,
                                       category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
-                    fig_rise.update_layout(barmode='group', margin=dict(l=0, r=0, t=30, b=0))
+                    fig_rise.update_layout(barmode='group', margin=dict(l=0, r=0, t=30),
+                                           legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
                     st.plotly_chart(fig_rise, use_container_width=True)
 
 
@@ -301,7 +301,8 @@ if base_file or end_file:
                                                 color_discrete_map=RISE_COLORS, 
                                                 text=base_stacked['Percentage'].apply(lambda x: f'{x:.1f}%' if x > 5 else ''),
                                                 category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
-                        fig_base_grade.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30, b=0))
+                        fig_base_grade.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30),
+                                                     legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
                         st.plotly_chart(fig_base_grade, use_container_width=True)
                     else:
                         st.info("No Baseline data available.")
@@ -313,7 +314,8 @@ if base_file or end_file:
                                                color_discrete_map=RISE_COLORS, 
                                                text=end_stacked['Percentage'].apply(lambda x: f'{x:.1f}%' if x > 5 else ''),
                                                category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
-                        fig_end_grade.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30, b=0))
+                        fig_end_grade.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30),
+                                                    legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
                         st.plotly_chart(fig_end_grade, use_container_width=True)
                     else:
                         st.info("No Endline data available.")
@@ -373,13 +375,17 @@ if base_file or end_file:
                         state_cat = filtered_df.groupby(['State', 'Academic Year', 'Category']).size().reset_index(name='Count')
                         state_cat['Percentage'] = state_cat.groupby(['State', 'Academic Year'])['Count'].transform(lambda x: x / x.sum() * 100)
                         
-                        fig_state = px.bar(state_cat, x="Academic Year", y="Percentage", color="Category", facet_col="State",
+                        # Apply Abbreviation to the Academic Year column for this specific chart
+                        state_cat['Period'] = state_cat['Academic Year'].map({'Baseline': 'B', 'Endline': 'E'})
+                        
+                        fig_state = px.bar(state_cat, x="Period", y="Percentage", color="Category", facet_col="State",
                                            color_discrete_map=RISE_COLORS,
                                            text=state_cat['Percentage'].apply(lambda x: f'{x:.1f}%' if not pd.isna(x) and x > 5 else ''),
                                            category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"],
-                                                            "Academic Year": ["Baseline", "Endline"]})
+                                                            "Period": ["B", "E"]})
                         
-                        fig_state.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30, b=0))
+                        fig_state.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=40),
+                                                legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=""))
                         fig_state.update_xaxes(title_text='')
                         fig_state.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
                         
@@ -419,7 +425,8 @@ if base_file or end_file:
                                                  text=top_centres_long['Percentage'].apply(lambda x: f'{x:.1f}%' if x > 5 else ''),
                                                  category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
                         
-                        fig_top_centres.update_layout(barmode='stack', xaxis_title="% of Students", yaxis_title="", margin=dict(l=0, r=0, t=30, b=0))
+                        fig_top_centres.update_layout(barmode='stack', xaxis_title="% of Students", yaxis_title="", margin=dict(l=0, r=0, t=30),
+                                                      legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
                         st.plotly_chart(fig_top_centres, use_container_width=True)
                     else:
                         st.info("No data available for Top Centres.")
@@ -538,7 +545,8 @@ if base_file or end_file:
                             avg_gen = gdf.groupby(['Gender', 'Academic Year'])['Obtained Marks'].mean().reset_index()
                             fig_gen_avg = px.bar(avg_gen, x="Gender", y="Obtained Marks", color="Academic Year", barmode="group",
                                                  color_discrete_map=COLOR_MAP, text_auto='.2f')
-                            fig_gen_avg.update_layout(yaxis_title="Average Marks", margin=dict(l=0, r=0, t=30, b=0))
+                            fig_gen_avg.update_layout(yaxis_title="Average Marks", margin=dict(l=0, r=0, t=30),
+                                                      legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
                             st.plotly_chart(fig_gen_avg, use_container_width=True)
                             
                         with gen_col2:
@@ -553,7 +561,8 @@ if base_file or end_file:
                                                   text=gen_cat['Percentage'].apply(lambda x: f'{x:.1f}%' if not pd.isna(x) and x > 5 else ''),
                                                   category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"],
                                                                    "Academic Year": ["Baseline", "Endline"]})
-                            fig_gen_rise.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30, b=0))
+                            fig_gen_rise.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=40),
+                                                       legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=""))
                             fig_gen_rise.update_xaxes(title_text='')
                             fig_gen_rise.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
                             st.plotly_chart(fig_gen_rise, use_container_width=True)
