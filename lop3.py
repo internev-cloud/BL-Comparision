@@ -37,9 +37,9 @@ st.markdown("<p style='color: gray; font-size: 1.1em;'>Comprehensive Baseline vs
 # SIDEBAR: LOGO & FILTERS
 # ==========================================
 with st.sidebar:
-    # eVidyaloka Logo
+    # eVidyaloka Logo - Size reduced to pull filters up
     try:
-        st.image("evidyaloka_logo.png", use_container_width=True)
+        st.image("evidyaloka_logo.png", width=120)
     except:
         st.warning("⚠️ Logo not found. Please ensure 'evidyaloka_logo.png' is in the same folder as this script.")
     st.markdown("---")
