@@ -164,7 +164,7 @@ if os.path.exists(DATA_FILE):
 
             # 6. Gender Filter (Dependent on Grade, Multi-select)
             if 'Gender' in df_grade_filtered.columns:
-                valid_genders = df_grade_filtered[~df_grade_filtered['Gender'].str.lower().isin(['nan', 'none', 'null', ''])]
+                valid_genders = df_grade_filtered[~df_grade_filtered['Gender'].str.lower().isin(['nan', 'none', 'null', ''])].copy()
                 genders = sorted(valid_genders['Gender'].unique().tolist())
                 if genders:
                     selected_genders = st.multiselect("Select Gender(s)", options=genders, default=genders)
@@ -200,7 +200,11 @@ if os.path.exists(DATA_FILE):
                 # Expanded to 5 columns to fit SD
                 kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
                 
-                total_assessments = len(filtered_df)
+                # Calculate Matched Students for the KPI
+                if not base_df.empty and not end_df.empty and 'Student ID' in df.columns:
+                    matched_students = len(pd.merge(base_df[['Student ID', 'Subject']].dropna(), end_df[['Student ID', 'Subject']].dropna(), on=['Student ID', 'Subject']))
+                else:
+                    matched_students = 0
                 
                 avg_base = base_df['Obtained Marks'].mean() if not base_df.empty else None
                 avg_end = end_df['Obtained Marks'].mean() if not end_df.empty else None
@@ -208,7 +212,7 @@ if os.path.exists(DATA_FILE):
                 sd_base = base_df['Obtained Marks'].std() if not base_df.empty and len(base_df) > 1 else None
                 sd_end = end_df['Obtained Marks'].std() if not end_df.empty and len(end_df) > 1 else None
 
-                kpi1.metric("Total Assessments", f"{total_assessments:,}")
+                kpi1.metric("Matched Students", f"{matched_students:,}")
                 
                 if avg_base is not None and avg_end is not None:
                     kpi2.metric("Baseline Mean Score", f"{avg_base:.2f}")
