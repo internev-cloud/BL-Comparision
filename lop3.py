@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import os
 
 # ==========================================
 # PAGE CONFIGURATION & CUSTOM CSS
@@ -33,61 +34,45 @@ st.title("📈 Impact Analytics Dashboard")
 st.markdown("<p style='color: gray; font-size: 1.1em;'>Comprehensive Baseline vs. Endline Performance Assessment</p>", unsafe_allow_html=True)
 
 # ==========================================
-# SIDEBAR: DATA INTAKE & FILTERS
+# SIDEBAR: LOGO & FILTERS
 # ==========================================
 with st.sidebar:
-    st.header("📁 1. Data Intake")
-    
-    upload_mode = st.radio("Upload Method:", ["Two Separate Files", "Single File (Multiple Sheets)"])
-    st.markdown("<span style='color: gray; font-size: 0.85em;'>Select your data structure and upload below.</span>", unsafe_allow_html=True)
-    
-    base_file, end_file = None, None
-    base_sheet, end_sheet = 0, 0
+    # eVidyaloka Logo
+    try:
+        st.image("evidyaloka_logo.png", use_container_width=True)
+    except:
+        st.warning("⚠️ Logo not found. Please ensure 'evidyaloka_logo.png' is in the same folder as this script.")
+    st.markdown("---")
 
-    if upload_mode == "Two Separate Files":
-        base_file = st.file_uploader("Upload Baseline Data", type=["csv", "xlsx"])
-        end_file = st.file_uploader("Upload Endline Data", type=["csv", "xlsx"])
-    else:
-        single_file = st.file_uploader("Upload Master Workbook", type=["xlsx"])
-        if single_file:
-            # Read sheet names to populate dropdowns
-            xls = pd.ExcelFile(single_file)
-            sheet_names = xls.sheet_names
-            
-            # Smart defaults (auto-detect if named appropriately)
-            def_base = sheet_names.index('Baseline') if 'Baseline' in sheet_names else 0
-            def_end = sheet_names.index('Endline') if 'Endline' in sheet_names else (1 if len(sheet_names) > 1 else 0)
-            
-            base_sheet = st.selectbox("Select Baseline Sheet", sheet_names, index=def_base)
-            end_sheet = st.selectbox("Select Endline Sheet", sheet_names, index=def_end)
-            
-            base_file = single_file
-            end_file = single_file
-
-    st.divider()
-
+# ==========================================
+# DATA LOADING ENGINE
+# ==========================================
 @st.cache_data
-def load_and_prep_data(base_file, end_file, base_sheet=0, end_sheet=0):
+def load_and_prep_data(file_path):
     common_cols = ['State', 'Centre Name', 'Donor', 'Subject', 'Grade', 'Student ID', 'Gender', 'Total Marks', 'Obtained Marks', 'Category', 'Academic Year']
     dfs_to_concat = []
 
-    def read_data(f, sheet):
-        f.seek(0) # Reset file pointer in case the same file object is read twice
-        if f.name.endswith('.csv'):
-            return pd.read_csv(f)
-        return pd.read_excel(f, sheet_name=sheet)
+    try:
+        xls = pd.ExcelFile(file_path)
+        sheet_names = xls.sheet_names
+        
+        # Smart defaults (auto-detect if named appropriately)
+        base_sheet = 'Baseline' if 'Baseline' in sheet_names else 0
+        end_sheet = 'Endline' if 'Endline' in sheet_names else (1 if len(sheet_names) > 1 else 0)
 
-    if base_file is not None:
-        df_base = read_data(base_file, base_sheet)
+        df_base = pd.read_excel(file_path, sheet_name=base_sheet)
         if 'Rubrics' in df_base.columns: df_base.rename(columns={'Rubrics': 'Category'}, inplace=True)
         df_base['Academic Year'] = 'Baseline'
         dfs_to_concat.append(df_base[[c for c in common_cols if c in df_base.columns]])
 
-    if end_file is not None:
-        df_end = read_data(end_file, end_sheet)
+        df_end = pd.read_excel(file_path, sheet_name=end_sheet)
         if 'Rubrics' in df_end.columns: df_end.rename(columns={'Rubrics': 'Category'}, inplace=True)
         df_end['Academic Year'] = 'Endline'
         dfs_to_concat.append(df_end[[c for c in common_cols if c in df_end.columns]])
+        
+    except Exception as e:
+        st.error(f"Error reading the Excel file: {e}")
+        return pd.DataFrame()
 
     if not dfs_to_concat:
         return pd.DataFrame()
@@ -116,19 +101,21 @@ def load_and_prep_data(base_file, end_file, base_sheet=0, end_sheet=0):
 
     return df_combined
 
-# Define color palette for consistency
+# Define custom color palette for R.I.S.E Categories
 COLOR_MAP = {'Baseline': '#636EFA', 'Endline': '#00CC96'}
-RISE_COLORS = {"Reviving": "#EF553B", "Initiating": "#AB63FA", "Shaping": "#FFA15A", "Evolving": "#00CC96"}
+RISE_COLORS = {"Reviving": "#f27c48", "Initiating": "#0094c9", "Shaping": "#00964d", "Evolving": "#ed1c2d"}
 
-if base_file or end_file:
-    with st.spinner('Crunching numbers...'):
-        df = load_and_prep_data(base_file, end_file, base_sheet, end_sheet)
+DATA_FILE = "BL-EL-AY-25-26-Final-AllSubjects.xlsx"
+
+if os.path.exists(DATA_FILE):
+    with st.spinner('Loading and crunching numbers...'):
+        df = load_and_prep_data(DATA_FILE)
 
     if not df.empty:
         with st.sidebar:
-            st.header("🎯 2. Global Filters")
+            st.header("🎯 Global Filters")
             
-            # 1. State Filter
+            # 1. State Filter (Displays Full Names from pristine df)
             states = ["All"] + sorted(df['State'].dropna().unique().tolist())
             selected_states = st.selectbox("Select State", states, index=0)
             
@@ -367,79 +354,79 @@ if base_file or end_file:
             with tab3:
                 st.markdown("### 🗺️ Geographic & Centre Analysis")
                 
-                geo_col1, geo_col2 = st.columns([3, 2])
+                st.markdown("#### State-wise Performance Comparison (R.I.S.E %)")
                 
-                with geo_col1:
-                    st.markdown("#### State-wise Performance Comparison (R.I.S.E %)")
+                if not filtered_df.empty:
+                    state_cat = filtered_df.groupby(['State', 'Academic Year', 'Category']).size().reset_index(name='Count')
+                    state_cat['Percentage'] = state_cat.groupby(['State', 'Academic Year'])['Count'].transform(lambda x: x / x.sum() * 100)
                     
-                    if not filtered_df.empty:
-                        state_cat = filtered_df.groupby(['State', 'Academic Year', 'Category']).size().reset_index(name='Count')
-                        state_cat['Percentage'] = state_cat.groupby(['State', 'Academic Year'])['Count'].transform(lambda x: x / x.sum() * 100)
+                    # Apply Abbreviation to the Academic Year column for this specific chart
+                    state_cat['Period'] = state_cat['Academic Year'].map({'Baseline': 'B', 'Endline': 'E'})
+                    
+                    # Dynamic State Abbreviation (Initials for multi-word, first 3 letters for single-word)
+                    def abbreviate_state(state_name):
+                        words = str(state_name).split()
+                        if len(words) > 1:
+                            return "".join([w[0].upper() for w in words])
+                        return str(state_name)[:3].upper()
                         
-                        # Apply Abbreviation to the Academic Year column for this specific chart
-                        state_cat['Period'] = state_cat['Academic Year'].map({'Baseline': 'B', 'Endline': 'E'})
-                        
-                        # NEW: Dynamic State Abbreviation (Initials for multi-word, first 3 letters for single-word)
-                        def abbreviate_state(state_name):
-                            words = str(state_name).split()
-                            if len(words) > 1:
-                                return "".join([w[0].upper() for w in words])
-                            return str(state_name)[:3].upper()
+                    # Create a specific column for the facet layout so the main 'State' is intact for hover
+                    state_cat['State Abbr'] = state_cat['State'].apply(abbreviate_state)
+                    
+                    fig_state = px.bar(state_cat, x="Period", y="Percentage", color="Category", facet_col="State Abbr",
+                                       hover_data={"State": True, "State Abbr": False, "Period": False, "Academic Year": True},
+                                       color_discrete_map=RISE_COLORS,
+                                       text=state_cat['Percentage'].apply(lambda x: f'{x:.1f}%' if not pd.isna(x) and x > 5 else ''),
+                                       category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"],
+                                                        "Period": ["B", "E"]})
+                    
+                    fig_state.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=40),
+                                            legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=""))
+                    fig_state.update_xaxes(title_text='')
+                    fig_state.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+                    
+                    st.plotly_chart(fig_state, use_container_width=True)
+                else:
+                    st.info("No data available for State comparison.")
+                
+                st.markdown("---")
+
+                st.markdown("#### Top 10 Centres (Sorted by % Evolving)")
+                
+                if not filtered_df.empty:
+                    center_cat = filtered_df.groupby(['Centre Name', 'Category']).size().reset_index(name='Count')
+                    center_cat['Percentage'] = center_cat.groupby('Centre Name')['Count'].transform(lambda x: x / x.sum() * 100)
+                    
+                    center_piv = center_cat.pivot(index='Centre Name', columns='Category', values='Percentage').fillna(0)
+                    
+                    for cat in ["Reviving", "Initiating", "Shaping", "Evolving"]:
+                        if cat not in center_piv.columns:
+                            center_piv[cat] = 0
                             
-                        state_cat['State'] = state_cat['State'].apply(abbreviate_state)
-                        
-                        fig_state = px.bar(state_cat, x="Period", y="Percentage", color="Category", facet_col="State",
-                                           color_discrete_map=RISE_COLORS,
-                                           text=state_cat['Percentage'].apply(lambda x: f'{x:.1f}%' if not pd.isna(x) and x > 5 else ''),
-                                           category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"],
-                                                            "Period": ["B", "E"]})
-                        
-                        fig_state.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=40),
-                                                legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=""))
-                        fig_state.update_xaxes(title_text='')
-                        fig_state.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-                        
-                        st.plotly_chart(fig_state, use_container_width=True)
-                    else:
-                        st.info("No data available for State comparison.")
+                    center_piv_sorted = center_piv.sort_values(
+                        by=['Evolving', 'Shaping', 'Initiating', 'Reviving'], 
+                        ascending=[False, False, False, False]
+                    ).head(10)
                     
-                with geo_col2:
-                    st.markdown("#### Top 10 Centres (Sorted by % Evolving)")
+                    center_piv_sorted = center_piv_sorted.iloc[::-1]
                     
-                    if not filtered_df.empty:
-                        center_cat = filtered_df.groupby(['Centre Name', 'Category']).size().reset_index(name='Count')
-                        center_cat['Percentage'] = center_cat.groupby('Centre Name')['Count'].transform(lambda x: x / x.sum() * 100)
-                        
-                        center_piv = center_cat.pivot(index='Centre Name', columns='Category', values='Percentage').fillna(0)
-                        
-                        for cat in ["Reviving", "Initiating", "Shaping", "Evolving"]:
-                            if cat not in center_piv.columns:
-                                center_piv[cat] = 0
-                                
-                        center_piv_sorted = center_piv.sort_values(
-                            by=['Evolving', 'Shaping', 'Initiating', 'Reviving'], 
-                            ascending=[False, False, False, False]
-                        ).head(10)
-                        
-                        center_piv_sorted = center_piv_sorted.iloc[::-1]
-                        
-                        top_centres_long = center_piv_sorted.reset_index().melt(
-                            id_vars='Centre Name', 
-                            value_vars=["Reviving", "Initiating", "Shaping", "Evolving"], 
-                            var_name='Category', 
-                            value_name='Percentage'
-                        )
-                        
-                        fig_top_centres = px.bar(top_centres_long, x="Percentage", y="Centre Name", color="Category", 
-                                                 orientation='h', color_discrete_map=RISE_COLORS,
-                                                 text=top_centres_long['Percentage'].apply(lambda x: f'{x:.1f}%' if x > 5 else ''),
-                                                 category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
-                        
-                        fig_top_centres.update_layout(barmode='stack', xaxis_title="% of Students", yaxis_title="", margin=dict(l=0, r=0, t=30),
-                                                      legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
-                        st.plotly_chart(fig_top_centres, use_container_width=True)
-                    else:
-                        st.info("No data available for Top Centres.")
+                    top_centres_long = center_piv_sorted.reset_index().melt(
+                        id_vars='Centre Name', 
+                        value_vars=["Reviving", "Initiating", "Shaping", "Evolving"], 
+                        var_name='Category', 
+                        value_name='Percentage'
+                    )
+                    
+                    fig_top_centres = px.bar(top_centres_long, x="Percentage", y="Centre Name", color="Category", 
+                                             orientation='h', color_discrete_map=RISE_COLORS,
+                                             text=top_centres_long['Percentage'].apply(lambda x: f'{x:.1f}%' if x > 5 else ''),
+                                             category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
+                    
+                    fig_top_centres.update_layout(barmode='stack', xaxis_title="% of Students", yaxis_title="", margin=dict(l=0, r=0, t=30),
+                                                  legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
+                    st.plotly_chart(fig_top_centres, use_container_width=True)
+                else:
+                    st.info("No data available for Top Centres.")
 
 
             # ------------------------------------------
@@ -584,5 +571,5 @@ if base_file or end_file:
 
 else:
     # Empty State Graphic/Message
-    st.info("👈 Please select your upload method and provide the data files to populate the dashboard.")
+    st.info(f"👈 Please ensure the file `{DATA_FILE}` is in the same folder to populate the dashboard.")
     st.image("https://cdn-icons-png.flaticon.com/512/7264/7264168.png", width=150)
