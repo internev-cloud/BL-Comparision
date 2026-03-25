@@ -4,10 +4,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 
-
+# ==========================================
+# PAGE CONFIGURATION & CUSTOM CSS
+# ==========================================
 st.set_page_config(page_title="Impact Analytics Dashboard", layout="wide", initial_sidebar_state="expanded")
 
-
+# Custom CSS for better KPI cards and UI polishing
 st.markdown("""
 <style>
     [data-testid="stMetricValue"] {
@@ -31,11 +33,11 @@ st.markdown("""
 st.title("📈 Impact Analytics Dashboard")
 st.markdown("<p style='color: gray; font-size: 1.1em;'>Comprehensive Baseline vs. Endline Performance Assessment</p>", unsafe_allow_html=True)
 
-
+# ==========================================
 # SIDEBAR: LOGO & FILTERS
-
+# ==========================================
 with st.sidebar:
-    
+    # eVidyaloka Logo - Size reduced to pull filters up
     try:
         st.image("evidyaloka_logo.png", width=273)
     except:
@@ -369,7 +371,7 @@ if os.path.exists(DATA_FILE):
                     def abbreviate_state(state_name):
                         words = str(state_name).split()
                         if len(words) > 1:
-                            return "".join([w[0].upper() for w in words])
+                            return "".join([w.upper() for w in words])
                         return str(state_name)[:3].upper()
                         
                     # Create a specific column for the facet layout so the main 'State' is intact for hover
@@ -491,83 +493,82 @@ if os.path.exists(DATA_FILE):
                         fig_heat.update_coloraxes(showscale=False)
                         fig_heat.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=500)
                         
-                        col1, col2, col3 = st.columns([1, 4, 1])
+                        col1, col2, col3 = st.columns()
                         with col2:
                             st.plotly_chart(fig_heat, use_container_width=True)
 
-                    else:
-                        st.warning("⚠️ Could not find matching 'Student ID' and 'Subject' between the Baseline and Endline datasets.")
-                else:
-                    st.info("⚠️ Both Baseline and Endline datasets with a valid 'Student ID' column are required for this analysis.")
-
-            # ==========================================
-                        # ADD THIS UNDER YOUR TRANSITION MATRIX IN TAB 4
+                        # ==========================================
+                        # ADDED RTM CHECK CODE
                         # ==========================================
                         st.markdown("---")
                         st.markdown("#### 📊 Regression to the Mean (RTM) Check")
                         st.caption("Splits students into tiers based on their Baseline scores to verify if improvements are genuine or just bottom-tier bounce-back.")
 
-                        if not paired_df.empty:
-                            try:
-                                # Split students into quartiles based on Baseline scores
-                                paired_df['BL_Tier'] = pd.qcut(
-                                    paired_df['Obtained Marks_BL'], 
-                                    q=[0, 0.25, 0.75, 1.0], 
-                                    labels=['Bottom 25%', 'Middle 50%', 'Top 25%'],
-                                    duplicates='drop'
+                        try:
+                            # Split students into quartiles based on Baseline scores
+                            paired_df['BL_Tier'] = pd.qcut(
+                                paired_df['Obtained Marks_BL'], 
+                                q=[0, 0.25, 0.75, 1.0], 
+                                labels=['Bottom 25%', 'Middle 50%', 'Top 25%'],
+                                duplicates='drop'
+                            )
+                            
+                            # Group by Tier and calculate averages
+                            tier_analysis = paired_df.groupby('BL_Tier', observed=False).agg(
+                                Students=('Student ID', 'count'),
+                                Avg_BL=('Obtained Marks_BL', 'mean'),
+                                Avg_EL=('Obtained Marks_EL', 'mean'),
+                                Avg_Delta=('Score Delta', 'mean')
+                            ).reset_index()
+
+                            # Format the dataframe for display
+                            tier_display = tier_analysis.copy()
+                            tier_display['Avg_BL'] = tier_display['Avg_BL'].round(2)
+                            tier_display['Avg_EL'] = tier_display['Avg_EL'].round(2)
+                            tier_display['Avg_Delta'] = tier_display['Avg_Delta'].round(2).apply(lambda x: f"{x:+.2f}")
+                            
+                            rtm_col1, rtm_col2 = st.columns([1, 1.5])
+                            
+                            with rtm_col1:
+                                st.markdown("**Tier Performance Summary**")
+                                st.dataframe(tier_display, use_container_width=True, hide_index=True)
+                                
+                                # Automated RTM Interpretation
+                                top_delta = tier_analysis.loc[tier_analysis['BL_Tier'] == 'Top 25%', 'Avg_Delta'].values
+                                mid_delta = tier_analysis.loc[tier_analysis['BL_Tier'] == 'Middle 50%', 'Avg_Delta'].values
+                                bot_delta = tier_analysis.loc[tier_analysis['BL_Tier'] == 'Bottom 25%', 'Avg_Delta'].values
+                                
+                                if len(bot_delta) > 0 and bot_delta > 0 and len(top_delta) > 0 and top_delta <= 0:
+                                    st.warning("⚠️ **RTM Alert:** Bottom 25% improved, but the Top 25% dropped. This suggests Regression to the Mean is inflating the overall average.")
+                                elif len(mid_delta) > 0 and mid_delta > 0:
+                                    st.success("✅ **Real Impact:** The Middle 50% also saw score increases. This indicates genuine learning, not just statistical bounce-back from the bottom.")
+
+                            with rtm_col2:
+                                # Visualize the Delta
+                                fig_rtm = px.bar(
+                                    tier_analysis, 
+                                    x='BL_Tier', 
+                                    y='Avg_Delta', 
+                                    color='BL_Tier',
+                                    color_discrete_map={'Bottom 25%': '#f27c48', 'Middle 50%': '#0094c9', 'Top 25%': '#00964d'},
+                                    text=tier_analysis['Avg_Delta'].apply(lambda x: f"{x:+.2f}")
                                 )
-                                
-                                # Group by Tier and calculate averages
-                                tier_analysis = paired_df.groupby('BL_Tier', observed=False).agg(
-                                    Students=('Student ID', 'count'),
-                                    Avg_BL=('Obtained Marks_BL', 'mean'),
-                                    Avg_EL=('Obtained Marks_EL', 'mean'),
-                                    Avg_Delta=('Score Delta', 'mean')
-                                ).reset_index()
+                                fig_rtm.update_layout(
+                                    showlegend=False, 
+                                    yaxis_title="Avg Score Change", 
+                                    xaxis_title="Baseline Tier",
+                                    margin=dict(l=0, r=0, t=30, b=0),
+                                    height=300
+                                )
+                                st.plotly_chart(fig_rtm, use_container_width=True)
 
-                                # Format the dataframe for display
-                                tier_display = tier_analysis.copy()
-                                tier_display['Avg_BL'] = tier_display['Avg_BL'].round(2)
-                                tier_display['Avg_EL'] = tier_display['Avg_EL'].round(2)
-                                tier_display['Avg_Delta'] = tier_display['Avg_Delta'].round(2).apply(lambda x: f"{x:+.2f}")
-                                
-                                rtm_col1, rtm_col2 = st.columns([1, 1.5])
-                                
-                                with rtm_col1:
-                                    st.markdown("**Tier Performance Summary**")
-                                    st.dataframe(tier_display, use_container_width=True, hide_index=True)
-                                    
-                                    # Automated RTM Interpretation
-                                    top_delta = tier_analysis.loc[tier_analysis['BL_Tier'] == 'Top 25%', 'Avg_Delta'].values
-                                    mid_delta = tier_analysis.loc[tier_analysis['BL_Tier'] == 'Middle 50%', 'Avg_Delta'].values
-                                    bot_delta = tier_analysis.loc[tier_analysis['BL_Tier'] == 'Bottom 25%', 'Avg_Delta'].values
-                                    
-                                    if len(bot_delta) > 0 and bot_delta > 0 and len(top_delta) > 0 and top_delta <= 0:
-                                        st.warning("⚠️ **RTM Alert:** Bottom 25% improved, but the Top 25% dropped. This suggests Regression to the Mean is inflating the overall average.")
-                                    elif len(mid_delta) > 0 and mid_delta > 0:
-                                        st.success("✅ **Real Impact:** The Middle 50% also saw score increases. This indicates genuine learning, not just statistical bounce-back from the bottom.")
+                        except ValueError:
+                            st.info("Not enough variance in Baseline scores to split students into quartiles for RTM analysis.")
 
-                                with rtm_col2:
-                                    # Visualize the Delta
-                                    fig_rtm = px.bar(
-                                        tier_analysis, 
-                                        x='BL_Tier', 
-                                        y='Avg_Delta', 
-                                        color='BL_Tier',
-                                        color_discrete_map={'Bottom 25%': '#f27c48', 'Middle 50%': '#0094c9', 'Top 25%': '#00964d'},
-                                        text=tier_analysis['Avg_Delta'].apply(lambda x: f"{x:+.2f}")
-                                    )
-                                    fig_rtm.update_layout(
-                                        showlegend=False, 
-                                        yaxis_title="Avg Score Change", 
-                                        xaxis_title="Baseline Tier",
-                                        margin=dict(l=0, r=0, t=30, b=0),
-                                        height=300
-                                    )
-                                    st.plotly_chart(fig_rtm, use_container_width=True)
-
-                            except ValueError:
-                                st.info("Not enough variance in Baseline scores to split students into quartiles for RTM analysis.")
+                    else:
+                        st.warning("⚠️ Could not find matching 'Student ID' and 'Subject' between the Baseline and Endline datasets.")
+                else:
+                    st.info("⚠️ Both Baseline and Endline datasets with a valid 'Student ID' column are required for this analysis.")
 
             # ------------------------------------------
             # TAB 5: GENDER-WISE ANALYSIS
