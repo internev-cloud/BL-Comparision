@@ -371,7 +371,7 @@ if os.path.exists(DATA_FILE):
                     def abbreviate_state(state_name):
                         words = str(state_name).split()
                         if len(words) > 1:
-                            return "".join([w.upper() for w in words])
+                            return "".join([w[0].upper() for w in words])
                         return str(state_name)[:3].upper()
                         
                     # Create a specific column for the facet layout so the main 'State' is intact for hover
@@ -493,7 +493,7 @@ if os.path.exists(DATA_FILE):
                         fig_heat.update_coloraxes(showscale=False)
                         fig_heat.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=500)
                         
-                        col1, col2, col3 = st.columns()
+                        col1, col2, col3 = st.columns([1, 4, 1])
                         with col2:
                             st.plotly_chart(fig_heat, use_container_width=True)
 
