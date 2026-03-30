@@ -180,12 +180,13 @@ if os.path.exists(DATA_FILE):
             # ==========================================
             # DASHBOARD TABS
             # ==========================================
-            tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
                 "📊 Executive Summary", 
                 "📚 Subject Deep-Dive", 
                 "🗺️ Geographic View",
                 "🧑‍🎓 Student-Level Impact",
-                "🚻 Gender Analysis"
+                "🚻 Gender Analysis",
+                "📉 RTM Analysis"
             ])
 
             base_df = filtered_df[filtered_df['Academic Year'] == 'Baseline']
@@ -371,7 +372,7 @@ if os.path.exists(DATA_FILE):
                     def abbreviate_state(state_name):
                         words = str(state_name).split()
                         if len(words) > 1:
-                            return "".join([w[0].upper() for w in words])
+                            return "".join([w.upper() for w in words])
                         return str(state_name)[:3].upper()
                         
                     # Create a specific column for the facet layout so the main 'State' is intact for hover
@@ -493,7 +494,7 @@ if os.path.exists(DATA_FILE):
                         fig_heat.update_coloraxes(showscale=False)
                         fig_heat.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=500)
                         
-                        col1, col2, col3 = st.columns([1, 4, 1])
+                        col1, col2, col3 = st.columns()
                         with col2:
                             st.plotly_chart(fig_heat, use_container_width=True)
 
@@ -572,6 +573,181 @@ if os.path.exists(DATA_FILE):
                         st.info("No valid gender data available in the current filtered selection.")
                 else:
                     st.warning("⚠️ 'Gender' column is missing from the uploaded dataset. Please ensure your files include a column labeled 'Gender' with values like 'Boy' or 'Girl'.")
+
+            # ------------------------------------------
+            # TAB 6: RTM ANALYSIS
+            # ------------------------------------------
+            with tab6:
+                st.markdown("### 📉 Regression to the Mean (RTM) Analysis")
+                
+                if not base_df.empty and not end_df.empty and 'Student ID' in df.columns:
+                    # Clean and merge data specifically for RTM (Requires numeric marks)
+                    base_rtm = base_df[['Student ID', 'Subject', 'Obtained Marks']].dropna(subset=['Student ID', 'Obtained Marks'])
+                    end_rtm = end_df[['Student ID', 'Subject', 'Obtained Marks']].dropna(subset=['Student ID', 'Obtained Marks'])
+                    
+                    rtm_df = pd.merge(base_rtm, end_rtm, on=['Student ID', 'Subject'], suffixes=('_BL', '_EL'))
+                    
+                    if not rtm_df.empty:
+                        st.markdown("---")
+                        # --- NORMALIZATION TOGGLE ---
+                        normalize_rtm = st.checkbox("⚙️ Normalize scores (Z-scores) before analysis", value=False, help="Standardizes scores so the Baseline and Endline both have a mean of 0 and standard deviation of 1. This prevents differences in test difficulty or variance from skewing the RTM analysis.")
+                        
+                        if normalize_rtm:
+                            # Convert raw scores to Z-scores
+                            rtm_df['Obtained Marks_BL'] = (rtm_df['Obtained Marks_BL'] - rtm_df['Obtained Marks_BL'].mean()) / rtm_df['Obtained Marks_BL'].std()
+                            rtm_df['Obtained Marks_EL'] = (rtm_df['Obtained Marks_EL'] - rtm_df['Obtained Marks_EL'].mean()) / rtm_df['Obtained Marks_EL'].std()
+                            
+                        # Calculate Delta (will naturally use raw or Z-scores based on the toggle)
+                        rtm_df['Score Delta'] = rtm_df['Obtained Marks_EL'] - rtm_df['Obtained Marks_BL']
+                        
+                        # --- KPI METRICS (TOP OF TAB) ---
+                        # 1. Calculate Statistics for KPIs
+                        correlation = rtm_df['Obtained Marks_BL'].corr(rtm_df['Score Delta'])
+                        variance = rtm_df['Obtained Marks_BL'].var()
+                        covariance = rtm_df['Obtained Marks_BL'].cov(rtm_df['Score Delta'])
+                        slope = covariance / variance if variance != 0 and not pd.isna(variance) else 0.0
+                        
+                        # Calculate Intercept early for the validation section below
+                        intercept = rtm_df['Score Delta'].mean() - (slope * rtm_df['Obtained Marks_BL'].mean()) if not pd.isna(slope) else 0.0
+                        
+                        # 2. Calculate Improving vs Declining Percentages
+                        total_rtm = len(rtm_df)
+                        improving_pct = (len(rtm_df[rtm_df['Score Delta'] > 0]) / total_rtm) * 100
+                        declining_pct = (len(rtm_df[rtm_df['Score Delta'] < 0]) / total_rtm) * 100
+                        
+                        # 3. Determine Interpretation Tag
+                        if slope <= -0.3:
+                            rtm_tag = "Strong RTM detected"
+                        elif slope <= -0.1:
+                            rtm_tag = "Moderate RTM"
+                        elif slope < 0:
+                            rtm_tag = "Minimal RTM"
+                        else:
+                            rtm_tag = "No RTM detected"
+                            
+                        # 4. Render Top KPIs
+                        kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+                        kpi_col1.metric("Correlation (r)", f"{correlation:.3f}" if not pd.isna(correlation) else "N/A")
+                        kpi_col2.metric("Regression Slope", f"{slope:.3f}")
+                        kpi_col3.metric("Improving vs Declining", f"{improving_pct:.1f}% / {declining_pct:.1f}%")
+                        kpi_col4.metric("Interpretation", rtm_tag)
+                        
+                        # 5. Interpretation Box
+                        if slope <= -0.1:
+                            st.warning("💡 **Important Insight:** Part of the observed improvement may be due to statistical regression to the mean rather than pure intervention impact. Students who scored exceptionally low on the baseline naturally tend to score closer to the average on the endline.")
+                        else:
+                            st.success("💡 **Important Insight:** Observed improvements are less likely driven by RTM. The growth seen across the cohort is more likely attributable to the actual impact of the educational intervention.")
+                            
+                        st.markdown("---")
+                        
+                        # --- SCATTER PLOT ---
+                        st.markdown("#### Core RTM View (Scatter Plot)")
+                        st.caption("**Interpretation:** A **negative slope** (trendline going down) suggests the RTM effect is present — meaning students with lower baseline scores tended to improve more, while those with higher baseline scores improved less or dropped.")
+                        
+                        # A. Scatter Plot with OLS Trendline
+                        fig_rtm = px.scatter(
+                            rtm_df, 
+                            x="Obtained Marks_BL", 
+                            y="Score Delta", 
+                            trendline="ols",
+                            trendline_color_override="red",
+                            opacity=0.6,
+                            color_discrete_sequence=["#636EFA"],
+                            labels={
+                                "Obtained Marks_BL": "Baseline Score (Z-Score)" if normalize_rtm else "Baseline Score",
+                                "Score Delta": "Score Delta (Z-Score)" if normalize_rtm else "Score Delta (Endline - Baseline)"
+                            }
+                        )
+                        
+                        # Add horizontal line at y = 0
+                        fig_rtm.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="No Change (Delta = 0)", annotation_position="bottom right")
+                        
+                        fig_rtm.update_layout(margin=dict(l=0, r=0, t=30))
+                        st.plotly_chart(fig_rtm, use_container_width=True)
+                        
+                        st.markdown("---")
+                        
+                        # --- BINNED ANALYSIS ---
+                        st.markdown("#### Binned Analysis (Quintiles)")
+                        st.caption("**Interpretation:** Students are grouped into 5 equal-sized bins based on their initial Baseline scores. If RTM is present, the chart will typically show a 'staircase' pattern: large positive deltas on the left (lowest scorers improving the most) and smaller or negative deltas on the right (highest scorers plateauing or declining).")
+                        
+                        try:
+                            # Create quintiles (5 bins) based on Baseline scores. 
+                            # 'duplicates=drop' prevents errors if many students have the exact same score.
+                            rtm_df['BL_Quintile'] = pd.qcut(rtm_df['Obtained Marks_BL'], q=5, duplicates='drop')
+                            
+                            # Calculate metrics for each bin
+                            binned_stats = rtm_df.groupby('BL_Quintile', observed=False).agg(
+                                Avg_BL_Score=('Obtained Marks_BL', 'mean'),
+                                Avg_Score_Delta=('Score Delta', 'mean'),
+                                Student_Count=('Student ID', 'count')
+                            ).reset_index()
+                            
+                            # Convert categorical intervals to strings for clean X-axis labels
+                            binned_stats['BL_Quintile_Str'] = binned_stats['BL_Quintile'].astype(str)
+                            binned_stats = binned_stats.sort_values('Avg_BL_Score')
+                            
+                            # Plotly Bar Chart with diverging colors (Green for positive delta, Red for negative)
+                            fig_binned = px.bar(
+                                binned_stats, 
+                                x='BL_Quintile_Str', 
+                                y='Avg_Score_Delta',
+                                text=binned_stats['Avg_Score_Delta'].apply(lambda x: f"{x:+.2f}"),
+                                color='Avg_Score_Delta',
+                                color_continuous_scale=px.colors.diverging.RdYlGn,
+                                color_continuous_midpoint=0,
+                                labels={
+                                    "BL_Quintile_Str": "Baseline Score Range (Quintiles)",
+                                    "Avg_Score_Delta": "Average Score Delta"
+                                },
+                                hover_data={
+                                    "Student_Count": True, 
+                                    "Avg_BL_Score": ':.2f',
+                                    "Avg_Score_Delta": ':.2f'
+                                }
+                            )
+                            
+                            fig_binned.add_hline(y=0, line_dash="solid", line_color="black", line_width=1)
+                            fig_binned.update_traces(textposition='outside')
+                            fig_binned.update_layout(margin=dict(l=0, r=0, t=30, b=40), coloraxis_showscale=False)
+                            
+                            st.plotly_chart(fig_binned, use_container_width=True)
+                            
+                        except ValueError:
+                            st.info("Not enough variance in Baseline scores to generate quintile bins for this selection.")
+                            
+                        st.markdown("---")
+                        
+                        # --- STATISTICAL VALIDATION ---
+                        st.markdown("#### 🧮 Statistical Validation")
+                        st.caption("Quantifying the strength of the Regression to the Mean effect using linear regression.")
+                            
+                        # 3. Calculate R-squared (For simple linear regression, R^2 = r^2)
+                        r_squared = correlation ** 2 if not pd.isna(correlation) else 0.0
+                        
+                        # Display the metrics
+                        stat_col1, stat_col2, stat_col3 = st.columns(3)
+                        stat_col1.metric("Correlation (r)", f"{correlation:.3f}" if not pd.isna(correlation) else "N/A")
+                        stat_col2.metric("Regression Slope (b)", f"{slope:.3f}")
+                        stat_col3.metric("R-squared (R²)", f"{r_squared:.3f}")
+                        
+                        # Provide a dynamic text interpretation based on the slope
+                        st.markdown("**Mathematical Interpretation:**")
+                        equation_str = f"**Score Delta = {intercept:.2f} + ({slope:.2f} * Baseline)**"
+                        
+                        if slope < -0.3:
+                            st.success(f"✔️ **Strong RTM Effect Confirmed:** The strongly negative slope and equation {equation_str} prove that students with lower baselines experienced significantly higher growth.")
+                        elif slope < -0.1:
+                            st.info(f"ℹ️ **Moderate RTM Effect:** The negative slope and equation {equation_str} indicate a moderate Regression to the Mean pattern.")
+                        elif slope < 0:
+                            st.warning(f"⚠️ **Weak RTM Effect:** The slope is very close to zero. {equation_str}")
+                        else:
+                            st.error(f"❌ **No RTM Effect Detected:** The slope is positive ({slope:.2f}), meaning higher-scoring students actually improved *more* than lower-scoring students.")
+                            
+                    else:
+                        st.warning("⚠️ Could not find matching 'Student ID' and 'Subject' for RTM analysis.")
+                else:
+                    st.info("⚠️ Both Baseline and Endline datasets with a valid 'Student ID' column are required for this analysis.")
 
 else:
     # Empty State Graphic/Message
