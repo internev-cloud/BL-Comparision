@@ -45,7 +45,7 @@ with st.sidebar:
         st.warning("⚠️ Logo not found. Please ensure 'evidyaloka_logo.png' is in the same folder as this script.")
     st.markdown("---")
     
-    # --- UPDATE: File uploader fallback added here ---
+    # File uploader fallback added here
     st.markdown("### 📁 Data Source")
     uploaded_file = st.file_uploader("Upload Assessment Data", type=['xlsx'])
     st.markdown("---")
@@ -85,7 +85,7 @@ def load_and_prep_data(file_path):
 
     df_combined = pd.concat(dfs_to_concat, ignore_index=True)
 
-    # --- UPDATE: Added 'Category' to the stripping loop ---
+    # Added 'Category' to the stripping loop
     for col in ['State', 'Centre Name', 'Donor', 'Subject', 'Student ID', 'Gender', 'Category']:
         if col in df_combined.columns:
             df_combined[col] = df_combined[col].astype(str).str.strip()
@@ -113,7 +113,7 @@ RISE_COLORS = {"Reviving": "#f27c48", "Initiating": "#0094c9", "Shaping": "#0096
 
 DATA_FILE = "BL-EL-AY-25-26-Final-AllSubjects.xlsx"
 
-# --- UPDATE: Dynamic file targeting based on uploader vs local file ---
+# Dynamic file targeting based on uploader vs local file
 target_file = uploaded_file if uploaded_file is not None else DATA_FILE
 
 if uploaded_file is not None or os.path.exists(target_file):
@@ -259,7 +259,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                     fig_box = px.box(filtered_df, x="Academic Year", y="Obtained Marks", color="Academic Year", 
                                      color_discrete_map=COLOR_MAP, points="all")
                     fig_box.update_layout(showlegend=False, margin=dict(l=0, r=0, t=30))
-                    st.plotly_chart(fig_box, use_container_width=True)
+                    st.plotly_chart(fig_box, width='stretch')
 
                 with col_b:
                     st.markdown("#### 🧬 R.I.S.E Category Shift")
@@ -275,7 +275,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                                       category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
                     fig_rise.update_layout(barmode='group', margin=dict(l=0, r=0, t=30),
                                            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
-                    st.plotly_chart(fig_rise, use_container_width=True)
+                    st.plotly_chart(fig_rise, width='stretch')
 
 
             # ------------------------------------------
@@ -305,7 +305,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                                                 category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
                         fig_base_grade.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30),
                                                      legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
-                        st.plotly_chart(fig_base_grade, use_container_width=True)
+                        st.plotly_chart(fig_base_grade, width='stretch')
                     else:
                         st.info("No Baseline data available.")
                         
@@ -318,7 +318,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                                                category_orders={"Category": ["Reviving", "Initiating", "Shaping", "Evolving"]})
                         fig_end_grade.update_layout(barmode='stack', yaxis_title="% of Students", margin=dict(l=0, r=0, t=30),
                                                     legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
-                        st.plotly_chart(fig_end_grade, use_container_width=True)
+                        st.plotly_chart(fig_end_grade, width='stretch')
                     else:
                         st.info("No Endline data available.")
                 
@@ -399,7 +399,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                     fig_state.update_xaxes(title_text='')
                     fig_state.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
                     
-                    st.plotly_chart(fig_state, use_container_width=True)
+                    st.plotly_chart(fig_state, width='stretch')
                 else:
                     st.info("No data available for State comparison.")
                 
@@ -438,7 +438,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                     
                     fig_top_centres.update_layout(barmode='stack', xaxis_title="% of Students", yaxis_title="", margin=dict(l=0, r=0, t=30),
                                                   legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
-                    st.plotly_chart(fig_top_centres, use_container_width=True)
+                    st.plotly_chart(fig_top_centres, width='stretch')
                 else:
                     st.info("No data available for Top Centres.")
 
@@ -454,7 +454,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                     base_clean = base_df[['Student ID', 'Subject', 'Obtained Marks', 'Category']].dropna(subset=['Student ID'])
                     end_clean = end_df[['Student ID', 'Subject', 'Obtained Marks', 'Category']].dropna(subset=['Student ID'])
                     
-                    # --- UPDATE: Duplicate protection added here ---
+                    # Duplicate protection added here
                     base_clean = base_clean.drop_duplicates(subset=['Student ID', 'Subject'])
                     end_clean = end_clean.drop_duplicates(subset=['Student ID', 'Subject'])
                     
@@ -500,7 +500,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                                              x=transition.columns, y=transition.index,
                                              color_continuous_scale=["#FF7F7F", "#F2F4F7", "#82E0AA"]) 
                         
-                        text_matrix = transition.applymap(lambda x: f"{x:.1f}%")
+                        text_matrix = transition.map(lambda x: f"{x:.1f}%")
                         fig_heat.update_traces(text=text_matrix, texttemplate="%{text}", 
                                                hovertemplate="Baseline: %{y}<br>Endline: %{x}<br>Students: %{text}<extra></extra>")
                         
@@ -509,7 +509,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                         
                         col1, col2, col3 = st.columns()
                         with col2:
-                            st.plotly_chart(fig_heat, use_container_width=True)
+                            st.plotly_chart(fig_heat, width='stretch')
 
                     else:
                         st.warning("⚠️ Could not find matching 'Student ID' and 'Subject' between the Baseline and Endline datasets.")
@@ -562,7 +562,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                                                  color_discrete_map=COLOR_MAP, text_auto='.2f')
                             fig_gen_avg.update_layout(yaxis_title="Average Marks", margin=dict(l=0, r=0, t=30),
                                                       legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title=""))
-                            st.plotly_chart(fig_gen_avg, use_container_width=True)
+                            st.plotly_chart(fig_gen_avg, width='stretch')
                             
                         with gen_col2:
                             st.markdown("#### 🧬 R.I.S.E Category Shift")
@@ -580,7 +580,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                                                        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, title=""))
                             fig_gen_rise.update_xaxes(title_text='')
                             fig_gen_rise.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-                            st.plotly_chart(fig_gen_rise, use_container_width=True)
+                            st.plotly_chart(fig_gen_rise, width='stretch')
                             
                     else:
                         st.info("No valid gender data available in the current filtered selection.")
@@ -598,7 +598,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                     base_rtm = base_df[['Student ID', 'Subject', 'Obtained Marks']].dropna(subset=['Student ID', 'Obtained Marks'])
                     end_rtm = end_df[['Student ID', 'Subject', 'Obtained Marks']].dropna(subset=['Student ID', 'Obtained Marks'])
                     
-                    # --- UPDATE: Duplicate protection added here ---
+                    # Duplicate protection added here
                     base_rtm = base_rtm.drop_duplicates(subset=['Student ID', 'Subject'])
                     end_rtm = end_rtm.drop_duplicates(subset=['Student ID', 'Subject'])
                     
@@ -680,7 +680,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                         fig_rtm.add_hline(y=0, line_dash="dash", line_color="black", annotation_text="No Change (Delta = 0)", annotation_position="bottom right")
                         
                         fig_rtm.update_layout(margin=dict(l=0, r=0, t=30))
-                        st.plotly_chart(fig_rtm, use_container_width=True)
+                        st.plotly_chart(fig_rtm, width='stretch')
                         
                         st.markdown("---")
                         
@@ -728,7 +728,7 @@ if uploaded_file is not None or os.path.exists(target_file):
                             fig_binned.update_traces(textposition='outside')
                             fig_binned.update_layout(margin=dict(l=0, r=0, t=30, b=40), coloraxis_showscale=False)
                             
-                            st.plotly_chart(fig_binned, use_container_width=True)
+                            st.plotly_chart(fig_binned, width='stretch')
                             
                         except ValueError:
                             st.info("Not enough variance in Baseline scores to generate quintile bins for this selection.")
@@ -767,6 +767,6 @@ if uploaded_file is not None or os.path.exists(target_file):
                     st.info("⚠️ Both Baseline and Endline datasets with a valid 'Student ID' column are required for this analysis.")
 
 else:
-    # --- UPDATE: Empty State Graphic/Message text adjusted for uploader ---
+    # Empty State Graphic/Message text adjusted for uploader
     st.info(f"👈 Please upload a dataset or ensure `{DATA_FILE}` is in the same folder to populate the dashboard.")
     st.image("https://cdn-icons-png.flaticon.com/512/7264/7264168.png", width=150)
