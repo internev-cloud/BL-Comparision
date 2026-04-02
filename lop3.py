@@ -44,6 +44,11 @@ with st.sidebar:
     except:
         st.warning("⚠️ Logo not found. Please ensure 'evidyaloka_logo.png' is in the same folder as this script.")
     st.markdown("---")
+    
+    # --- UPDATE: File uploader fallback added here ---
+    st.markdown("### 📁 Data Source")
+    uploaded_file = st.file_uploader("Upload Assessment Data", type=['xlsx'])
+    st.markdown("---")
 
 # ==========================================
 # DATA LOADING ENGINE
@@ -80,8 +85,8 @@ def load_and_prep_data(file_path):
 
     df_combined = pd.concat(dfs_to_concat, ignore_index=True)
 
-    # Text cleaning
-    for col in ['State', 'Centre Name', 'Donor', 'Subject', 'Student ID', 'Gender']:
+    # --- UPDATE: Added 'Category' to the stripping loop ---
+    for col in ['State', 'Centre Name', 'Donor', 'Subject', 'Student ID', 'Gender', 'Category']:
         if col in df_combined.columns:
             df_combined[col] = df_combined[col].astype(str).str.strip()
 
@@ -108,9 +113,12 @@ RISE_COLORS = {"Reviving": "#f27c48", "Initiating": "#0094c9", "Shaping": "#0096
 
 DATA_FILE = "BL-EL-AY-25-26-Final-AllSubjects.xlsx"
 
-if os.path.exists(DATA_FILE):
+# --- UPDATE: Dynamic file targeting based on uploader vs local file ---
+target_file = uploaded_file if uploaded_file is not None else DATA_FILE
+
+if uploaded_file is not None or os.path.exists(target_file):
     with st.spinner('Loading and crunching numbers...'):
-        df = load_and_prep_data(DATA_FILE)
+        df = load_and_prep_data(target_file)
 
     if not df.empty:
         with st.sidebar:
@@ -446,6 +454,10 @@ if os.path.exists(DATA_FILE):
                     base_clean = base_df[['Student ID', 'Subject', 'Obtained Marks', 'Category']].dropna(subset=['Student ID'])
                     end_clean = end_df[['Student ID', 'Subject', 'Obtained Marks', 'Category']].dropna(subset=['Student ID'])
                     
+                    # --- UPDATE: Duplicate protection added here ---
+                    base_clean = base_clean.drop_duplicates(subset=['Student ID', 'Subject'])
+                    end_clean = end_clean.drop_duplicates(subset=['Student ID', 'Subject'])
+                    
                     paired_df = pd.merge(base_clean, end_clean, on=['Student ID', 'Subject'], suffixes=('_BL', '_EL'))
                     
                     if not paired_df.empty:
@@ -585,6 +597,10 @@ if os.path.exists(DATA_FILE):
                     # Clean and merge data specifically for RTM (Requires numeric marks)
                     base_rtm = base_df[['Student ID', 'Subject', 'Obtained Marks']].dropna(subset=['Student ID', 'Obtained Marks'])
                     end_rtm = end_df[['Student ID', 'Subject', 'Obtained Marks']].dropna(subset=['Student ID', 'Obtained Marks'])
+                    
+                    # --- UPDATE: Duplicate protection added here ---
+                    base_rtm = base_rtm.drop_duplicates(subset=['Student ID', 'Subject'])
+                    end_rtm = end_rtm.drop_duplicates(subset=['Student ID', 'Subject'])
                     
                     rtm_df = pd.merge(base_rtm, end_rtm, on=['Student ID', 'Subject'], suffixes=('_BL', '_EL'))
                     
@@ -751,6 +767,6 @@ if os.path.exists(DATA_FILE):
                     st.info("⚠️ Both Baseline and Endline datasets with a valid 'Student ID' column are required for this analysis.")
 
 else:
-    # Empty State Graphic/Message
-    st.info(f"👈 Please ensure the file `{DATA_FILE}` is in the same folder to populate the dashboard.")
+    # --- UPDATE: Empty State Graphic/Message text adjusted for uploader ---
+    st.info(f"👈 Please upload a dataset or ensure `{DATA_FILE}` is in the same folder to populate the dashboard.")
     st.image("https://cdn-icons-png.flaticon.com/512/7264/7264168.png", width=150)
