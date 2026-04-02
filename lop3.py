@@ -495,7 +495,7 @@ if os.path.exists(DATA_FILE):
                         fig_heat.update_coloraxes(showscale=False)
                         fig_heat.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=500)
                         
-                        col1, col2, col3 = st.columns(3)
+                        col1, col2, col3 = st.columns()
                         with col2:
                             st.plotly_chart(fig_heat, use_container_width=True)
 
