@@ -44,11 +44,6 @@ with st.sidebar:
     except:
         st.warning("⚠️ Logo not found. Please ensure 'evidyaloka_logo.png' is in the same folder as this script.")
     st.markdown("---")
-    
-    # File uploader fallback added here
-    st.markdown("### 📁 Data Source")
-    uploaded_file = st.file_uploader("Upload Assessment Data", type=['xlsx'])
-    st.markdown("---")
 
 # ==========================================
 # DATA LOADING ENGINE
@@ -113,12 +108,10 @@ RISE_COLORS = {"Reviving": "#f27c48", "Initiating": "#0094c9", "Shaping": "#0096
 
 DATA_FILE = "BL-EL-AY-25-26-Final-AllSubjects.xlsx"
 
-# Dynamic file targeting based on uploader vs local file
-target_file = uploaded_file if uploaded_file is not None else DATA_FILE
-
-if uploaded_file is not None or os.path.exists(target_file):
+# Removed uploader logic, strictly look for the local file
+if os.path.exists(DATA_FILE):
     with st.spinner('Loading and crunching numbers...'):
-        df = load_and_prep_data(target_file)
+        df = load_and_prep_data(DATA_FILE)
 
     if not df.empty:
         with st.sidebar:
@@ -767,6 +760,6 @@ if uploaded_file is not None or os.path.exists(target_file):
                     st.info("⚠️ Both Baseline and Endline datasets with a valid 'Student ID' column are required for this analysis.")
 
 else:
-    # Empty State Graphic/Message text adjusted for uploader
-    st.info(f"👈 Please upload a dataset or ensure `{DATA_FILE}` is in the same folder to populate the dashboard.")
+    # Empty State Error Message text adjusted to ask for the local file instead of an upload
+    st.error(f"⚠️ Data file not found! Please ensure `{DATA_FILE}` is placed in the same folder as this script to populate the dashboard.")
     st.image("https://cdn-icons-png.flaticon.com/512/7264/7264168.png", width=150)
